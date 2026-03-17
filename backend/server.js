@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -10,9 +11,9 @@ app.use(express.json());
 
 app.get("/health", (_, res) => res.json({ ok: true }));
 
-const KEY = process.env.ANTHROPIC_API_KEY || "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";
-const FSQ_KEY = process.env.FSQ_API_KEY || "2WWCD25KOZJW0KBFPTOG145NLS3XK14OJQT5OTWKUD3X3Y1Q";
-const GOOGLE_KEY = process.env.GOOGLE_API_KEY || "AIzaSyBdiQ4k89sOyJAVdXO_P_4AhNkvhPHi5xA";
+const KEY = process.env.ANTHROPIC_API_KEY;
+const FSQ_KEY = process.env.FSQ_API_KEY;
+const GOOGLE_KEY = process.env.GOOGLE_API_KEY;
 
 const callClaude = async (prompt, retries = 3, maxTokens = 3000, model = "claude-haiku-4-5-20251001") => {
   for (let i = 0; i < retries; i++) {
@@ -463,26 +464,31 @@ OR
 
 // Chat edit endpoint — AI makes live edits to a day
 app.post("/chat-edit", async (req, res) => {
-  const { city, message, currentDay, profile } = req.body;
+  const { city, message, currentDay, profile, history = [] } = req.body;
   if (!message || !currentDay) return res.status(400).json({ error: "message and currentDay required" });
 
   const profileContext = profile ? (() => {
     const lines = [];
     if (profile.pace === "slow") lines.push("prefers slow pace");
+    if (profile.pace === "fast") lines.push("likes packing a lot in");
     if (profile.food === "everything") lines.push("food-focused");
-    if (profile.budget === "luxury") lines.push("luxury budget");
-    if (profile.budget === "budget") lines.push("budget traveller");
-    if (profile.crowd === "hate") lines.push("avoids crowds");
+    if (profile.food === "local") lines.push("prefers local restaurants");
+    if (profile.vibe === "immerse") lines.push("avoids tourist traps");
+    if (profile.vibe === "relax") lines.push("prefers relaxed pace");
     return lines.length ? `(Traveller: ${lines.join(", ")})` : "";
   })() : "";
 
-  // Step 1: Get the updated itinerary as pure JSON
-  const jsonPrompt = `Edit this ${city} itinerary for Day ${currentDay.day}.
+  // Build conversation context from history
+  const historyContext = history.length > 0
+    ? "\n\nPrevious edits this session:\n" + history.map(m => `${m.role === "user" ? "User" : "AI"}: ${m.text}`).join("\n")
+    : "";
+
+  const jsonPrompt = `Edit this ${city} itinerary for Day ${currentDay.day}.${historyContext}
 
 Current slots:
 ${JSON.stringify(currentDay.slots, null, 2)}
 
-Request: "${message}" ${profileContext}
+New request: "${message}" ${profileContext}
 
 Rules:
 - Keep existing slots unless asked to remove/replace
@@ -490,12 +496,12 @@ Rules:
 - No time overlaps
 - Same JSON schema: {time, end_time, name, category, neighborhood, activity, transit_from_prev, price, must_know, is_meal, highlight}
 - is_meal true only for meals
+- Maintain logical time flow and opening hours
 
 Return ONLY the complete updated JSON object, nothing else:
 {"day":${currentDay.day},"theme":"${currentDay.theme}","slots":[...]}`;
 
-  // Step 2: Get a friendly message about what changed
-  const msgPrompt = `In one short sentence, describe what you would change to a ${city} itinerary given this request: "${message}". Be specific and friendly. No JSON.`;
+  const msgPrompt = `In one short friendly sentence, confirm what you changed in this ${city} itinerary based on: "${message}". Be specific. No JSON.`;
 
   try {
     // Run both in parallel

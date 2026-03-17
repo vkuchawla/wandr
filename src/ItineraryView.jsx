@@ -16,6 +16,8 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState(null);
+  const [undoStack, setUndoStack] = useState([]); // for undo after AI edits
   const [tripSaved, setTripSaved] = useState(false);
   const [savedTripId, setSavedTripId] = useState(preloadedDays?.length ? "preloaded" : null);
   const [activeSlot, setActiveSlot] = useState(null); // index of slot user is currently at
@@ -28,7 +30,7 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
   const totalDays = countDays(dates);
   const dayVibes  = moodContext.split("\n").filter(Boolean);
 
-  const BACKEND = "https://wandr-62i6.onrender.com";
+  const BACKEND = "http://192.168.12.108:3001";
 
   const generate = async () => {
     setStatus("loading"); setDaysData([]); setActiveDay(0); savedRef.current=false;
@@ -97,9 +99,14 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
     if (!msg.trim() || chatLoading) return;
     const day = daysData[activeDay];
     if (!day) return;
+    setChatError(null);
     setChatMessages(prev => [...prev, { role:"user", text:msg }]);
     setChatInput("");
     setChatLoading(true);
+
+    // Save current state to undo stack before editing
+    setUndoStack(prev => [...prev.slice(-4), { dayIdx: activeDay, day: JSON.parse(JSON.stringify(day)) }]);
+
     try {
       const res = await fetch(`${BACKEND}/chat-edit`, {
         method: "POST",
@@ -108,20 +115,30 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
           city,
           message: msg,
           currentDay: day,
-          profile: profile?.answers || null
+          profile: profile?.answers || null,
+          history: chatMessages.slice(-6) // send last 6 messages for context
         })
       });
       const data = await res.json();
       if (data.updatedDay) {
         setDaysData(prev => prev.map((d, i) => i === activeDay ? data.updatedDay : d));
-        setChatMessages(prev => [...prev, { role:"assistant", text: data.message || "Done! I've updated your itinerary." }]);
+        setChatMessages(prev => [...prev, { role:"assistant", text: data.message || "Done! Updated your itinerary.", success: true }]);
       } else {
-        setChatMessages(prev => [...prev, { role:"assistant", text: data.message || "I couldn't make that change. Try rephrasing." }]);
+        setChatMessages(prev => [...prev, { role:"assistant", text: data.message || "I couldn\'t make that change. Try rephrasing." }]);
       }
     } catch(e) {
-      setChatMessages(prev => [...prev, { role:"assistant", text:"Something went wrong. Try again." }]);
+      setChatError("Connection issue — try again");
+      setChatMessages(prev => [...prev, { role:"assistant", text:"Something went wrong. Try again.", error: true }]);
     }
     setChatLoading(false);
+  };
+
+  const undoLastEdit = () => {
+    if (!undoStack.length) return;
+    const last = undoStack[undoStack.length - 1];
+    setDaysData(prev => prev.map((d, i) => i === last.dayIdx ? last.day : d));
+    setUndoStack(prev => prev.slice(0, -1));
+    setChatMessages(prev => [...prev, { role:"assistant", text:"↩ Undone — restored previous version." }]);
   };
 
   const saveTrip = async () => {
@@ -400,19 +417,42 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
           <div onClick={e=>e.stopPropagation()} style={{background:T.white,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:480,height:"70vh",display:"flex",flexDirection:"column",animation:"slideUp 0.3s ease",fontFamily:"'DM Sans',sans-serif"}}>
             {/* Chat header */}
             <div style={{padding:"14px 20px 12px",borderBottom:`1px solid ${T.dust}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <div>
-                <div style={{fontSize:15,fontWeight:700,color:T.ink}}>Edit Day {daysData[activeDay]?.day}</div>
-                <div style={{fontSize:11,color:T.inkFaint}}>Ask me to add, remove or swap anything</div>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:34,height:34,borderRadius:"50%",background:`linear-gradient(135deg,${T.accent},#9b2020)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>✦</div>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:T.ink}}>Edit Day {daysData[activeDay]?.day}</div>
+                  <div style={{fontSize:11,color:T.inkFaint}}>Add, remove, or swap anything</div>
+                </div>
               </div>
-              <button onClick={()=>setShowChat(false)} style={{background:"none",border:"none",fontSize:20,color:T.inkFaint,cursor:"pointer"}}>×</button>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                {undoStack.length > 0 && (
+                  <button onClick={undoLastEdit}
+                    style={{padding:"5px 10px",borderRadius:10,background:T.paper,border:`1px solid ${T.dust}`,fontSize:11,fontWeight:700,color:T.inkLight,cursor:"pointer"}}>
+                    ↩ Undo
+                  </button>
+                )}
+                <button onClick={()=>setShowChat(false)} style={{background:"none",border:"none",fontSize:20,color:T.inkFaint,cursor:"pointer",lineHeight:1}}>×</button>
+              </div>
             </div>
 
-            {/* Suggestion chips */}
-            {chatMessages.length === 0 && (
-              <div style={{padding:"12px 16px",display:"flex",gap:8,flexWrap:"wrap",borderBottom:`1px solid ${T.dust}`}}>
-                {["Add a rooftop bar after dinner","Make it more local, less touristy","Swap lunch for street food","Add a morning coffee stop","Make day more adventurous"].map(s=>(
+            {/* Day selector */}
+            {daysData.length > 1 && (
+              <div style={{padding:"8px 16px",borderBottom:`1px solid ${T.dust}`,display:"flex",gap:6}}>
+                {daysData.map((d,i)=>(
+                  <button key={i} onClick={()=>setActiveDay(i)}
+                    style={{padding:"4px 12px",borderRadius:12,background:activeDay===i?T.ink:T.paper,border:`1px solid ${activeDay===i?"transparent":T.dust}`,color:activeDay===i?T.white:T.inkLight,fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                    Day {i+1}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Suggestion chips — always visible when no messages or after assistant response */}
+            {(chatMessages.length === 0 || chatMessages[chatMessages.length-1]?.role === "assistant") && !chatLoading && (
+              <div style={{padding:"10px 16px",display:"flex",gap:6,flexWrap:"wrap",borderBottom:`1px solid ${T.dust}`}}>
+                {["Add a rooftop bar","Make it more local","Swap lunch → street food","Add a morning coffee","More adventurous","Remove last stop"].map(s=>(
                   <button key={s} onClick={()=>sendChat(s)}
-                    style={{padding:"7px 12px",borderRadius:20,background:T.paper,border:`1px solid ${T.dust}`,fontSize:12,fontWeight:600,color:T.inkLight,cursor:"pointer",flexShrink:0}}>
+                    style={{padding:"5px 11px",borderRadius:20,background:T.paper,border:`1px solid ${T.dust}`,fontSize:11,fontWeight:600,color:T.inkLight,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
                     {s}
                   </button>
                 ))}
@@ -420,33 +460,46 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
             )}
 
             {/* Messages */}
-            <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
+            <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+              {chatMessages.length === 0 && (
+                <div style={{textAlign:"center",padding:"20px 0",color:T.inkFaint}}>
+                  <div style={{fontSize:28,marginBottom:8}}>✦</div>
+                  <div style={{fontSize:13,fontWeight:600,color:T.ink,marginBottom:4}}>What should we change?</div>
+                  <div style={{fontSize:12,color:T.inkFaint}}>Tap a suggestion or type your own edit</div>
+                </div>
+              )}
               {chatMessages.map((m,i)=>(
-                <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start",marginBottom:10}}>
-                  <div style={{maxWidth:"80%",padding:"10px 14px",borderRadius:m.role==="user"?"18px 18px 4px 18px":"18px 18px 18px 4px",background:m.role==="user"?T.ink:T.paper,color:m.role==="user"?T.white:T.ink,fontSize:13,lineHeight:1.5}}>
+                <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start",marginBottom:10,alignItems:"flex-end",gap:8}}>
+                  {m.role==="assistant" && (
+                    <div style={{width:24,height:24,borderRadius:"50%",background:`linear-gradient(135deg,${T.accent},#9b2020)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0,marginBottom:2}}>✦</div>
+                  )}
+                  <div style={{maxWidth:"78%",padding:"10px 14px",borderRadius:m.role==="user"?"18px 18px 4px 18px":"18px 18px 18px 4px",background:m.role==="user"?T.ink:m.error?"#fef2f2":m.success?`${T.sage}15`:T.paper,color:m.role==="user"?T.white:m.error?"#c84b2f":T.ink,fontSize:13,lineHeight:1.5,border:m.success?`1px solid ${T.sage}30`:"none"}}>
                     {m.text}
                   </div>
                 </div>
               ))}
               {chatLoading && (
-                <div style={{display:"flex",justifyContent:"flex-start",marginBottom:10}}>
-                  <div style={{padding:"10px 14px",borderRadius:"18px 18px 18px 4px",background:T.paper,color:T.inkFaint,fontSize:13,animation:"pulse 1s ease infinite"}}>
-                    Updating your itinerary…
+                <div style={{display:"flex",justifyContent:"flex-start",marginBottom:10,alignItems:"flex-end",gap:8}}>
+                  <div style={{width:24,height:24,borderRadius:"50%",background:`linear-gradient(135deg,${T.accent},#9b2020)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10}}>✦</div>
+                  <div style={{padding:"10px 14px",borderRadius:"18px 18px 18px 4px",background:T.paper,fontSize:13}}>
+                    <span style={{animation:"pulse 1s ease infinite",color:T.inkFaint}}>Updating Day {daysData[activeDay]?.day}…</span>
                   </div>
                 </div>
               )}
             </div>
 
             {/* Input */}
-            <div style={{padding:"12px 16px 28px",borderTop:`1px solid ${T.dust}`,display:"flex",gap:8}}>
-              <input value={chatInput} onChange={e=>setChatInput(e.target.value)}
-                onKeyDown={e=>e.key==="Enter"&&sendChat(chatInput)}
-                placeholder="Add a jazz bar, swap dinner, make it more local…"
-                style={{flex:1,padding:"12px 14px",borderRadius:14,border:`1.5px solid ${T.dust}`,background:T.cream,color:T.ink,fontSize:13,outline:"none"}}/>
-              <button onClick={()=>sendChat(chatInput)} disabled={!chatInput.trim()||chatLoading}
-                style={{padding:"12px 16px",borderRadius:14,background:chatInput.trim()?T.ink:T.dust,border:"none",color:T.white,fontSize:13,fontWeight:700,cursor:chatInput.trim()?"pointer":"default"}}>
-                →
-              </button>
+            <div style={{padding:"10px 16px 28px",borderTop:`1px solid ${T.dust}`}}>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <input value={chatInput} onChange={e=>setChatInput(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&sendChat(chatInput)}
+                  placeholder="Add a jazz bar, swap dinner, make it more local…"
+                  style={{flex:1,padding:"12px 14px",borderRadius:14,border:`1.5px solid ${chatInput?T.accent:T.dust}`,background:T.cream,color:T.ink,fontSize:13,outline:"none",transition:"border-color 0.2s"}}/>
+                <button onClick={()=>sendChat(chatInput)} disabled={!chatInput.trim()||chatLoading}
+                  style={{width:44,height:44,borderRadius:14,background:chatInput.trim()?`linear-gradient(135deg,${T.accent},#9b2020)`:T.dust,border:"none",color:T.white,fontSize:18,fontWeight:700,cursor:chatInput.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:chatInput.trim()?"0 4px 14px rgba(200,75,47,0.3)":"none",transition:"all 0.2s"}}>
+                  →
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -455,8 +508,9 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
       {/* Floating chat button */}
       {status==="done" && !showChat && (
         <button onClick={()=>setShowChat(true)}
-          style={{position:"fixed",bottom:NAV_H+16,right:20,width:52,height:52,borderRadius:"50%",background:T.ink,border:"none",boxShadow:"0 4px 20px rgba(28,22,18,0.25)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,zIndex:50,animation:"fadeUp 0.3s ease"}}>
-          ✏
+          style={{position:"fixed",bottom:NAV_H+16,right:16,borderRadius:28,background:`linear-gradient(135deg,${T.accent},#9b2020)`,border:"none",boxShadow:"0 4px 20px rgba(200,75,47,0.35)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px 18px",zIndex:50,animation:"fadeUp 0.3s ease"}}>
+          <span style={{fontSize:14,color:"white"}}>✦</span>
+          <span style={{fontSize:13,fontWeight:700,color:"white"}}>Edit with AI</span>
         </button>
       )}
 
