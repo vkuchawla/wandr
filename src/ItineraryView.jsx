@@ -28,7 +28,7 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
   const totalDays = countDays(dates);
   const dayVibes  = moodContext.split("\n").filter(Boolean);
 
-  const BACKEND = "http://192.168.12.108:3001";
+  const BACKEND = "https://wandr-62i6.onrender.com";
 
   const generate = async () => {
     setStatus("loading"); setDaysData([]); setActiveDay(0); savedRef.current=false;

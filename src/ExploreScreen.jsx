@@ -66,7 +66,7 @@ const CITY_VIBES_EXTRA = {
 
 const ALL_CITIES = [...EXPLORE_CITIES, ...MORE_CITIES];
 
-const BACKEND = "http://192.168.4.27:3001";
+const BACKEND = "https://wandr-62i6.onrender.com";
 
 function ExploreScreen({ onSelectCity, supabase }) {
   const [query, setQuery] = useState("");
