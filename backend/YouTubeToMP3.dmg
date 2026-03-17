@@ -1,0 +1,512 @@
+const express = require("express");
+const cors = require("cors");
+const axios = require("axios");
+
+const app = express();
+const PORT = 3001;
+
+app.use(cors({ origin: "*" }));
+app.use(express.json());
+
+app.get("/health", (_, res) => res.json({ ok: true }));
+
+const KEY = process.env.ANTHROPIC_API_KEY || "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";
+const FSQ_KEY = process.env.FSQ_API_KEY || "2WWCD25KOZJW0KBFPTOG145NLS3XK14OJQT5OTWKUD3X3Y1Q";
+const GOOGLE_KEY = process.env.GOOGLE_API_KEY || "AIzaSyBdiQ4k89sOyJAVdXO_P_4AhNkvhPHi5xA";
+
+const callClaude = async (prompt, retries = 3, maxTokens = 3000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const { data } = await axios.post(
+        "https://api.anthropic.com/v1/messages",
+        { model: "claude-sonnet-4-6", max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] },
+        { headers: { "x-api-key": KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" } }
+      );
+      return data.content?.[0]?.text || "";
+    } catch(e) {
+      const isOverloaded = e.response?.data?.error?.type === "overloaded_error";
+      if (isOverloaded && i < retries - 1) {
+        console.log(`Overloaded, retrying in ${(i+1)*3}s...`);
+        await new Promise(r => setTimeout(r, (i+1) * 3000));
+      } else throw e;
+    }
+  }
+};
+
+const enrichWithPhotos = async (slots, city) => {
+  await Promise.all(slots.map(async (slot) => {
+    try {
+      // Get photo from Foursquare
+      const timeout = { timeout: 3000 };
+      const searchRes = await axios.get("https://api.foursquare.com/v3/places/search", {
+        headers: { Authorization: FSQ_KEY },
+        params: { query: slot.name, near: city, limit: 1 },
+        ...timeout
+      });
+      const place = searchRes.data?.results?.[0];
+      if (place?.fsq_id) {
+        const photoRes = await axios.get(`https://api.foursquare.com/v3/places/${place.fsq_id}/photos`, {
+          headers: { Authorization: FSQ_KEY },
+          params: { limit: 1 },
+          ...timeout
+        });
+        const photo = photoRes.data?.[0];
+        if (photo) slot.photo = `${photo.prefix}800x450${photo.suffix}`;
+      }
+    } catch(e) { /* photos optional */ }
+
+    // Get hours from Google Places
+    try {
+      const gRes = await axios.post(
+        "https://places.googleapis.com/v1/places:searchText",
+        { textQuery: `${slot.name} ${city}`, languageCode: "en" },
+        {
+          headers: {
+            "X-Goog-Api-Key": GOOGLE_KEY,
+            "X-Goog-FieldMask": "places.regularOpeningHours,places.currentOpeningHours",
+            "Content-Type": "application/json"
+          },
+          timeout: 4000
+        }
+      );
+      const gPlace = gRes.data?.places?.[0];
+      if (gPlace?.regularOpeningHours) {
+        slot.opening_hours = gPlace.regularOpeningHours.weekdayDescriptions || [];
+        slot.hours_periods = gPlace.regularOpeningHours.periods || [];
+
+        // Check if slot time falls within opening hours
+        const slotWarning = checkHoursConflict(slot.time, slot.hours_periods);
+        if (slotWarning) slot.hours_warning = slotWarning;
+      }
+    } catch(e) { /* hours optional */ }
+  }));
+};
+
+// Check if a time string conflicts with opening hours periods
+const checkHoursConflict = (timeStr, periods) => {
+  if (!timeStr || !periods?.length) return null;
+  try {
+    // Parse slot time to minutes since midnight
+    const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!match) return null;
+    let h = parseInt(match[1]);
+    const m = parseInt(match[2]);
+    const ampm = match[3].toUpperCase();
+    if (ampm === "PM" && h !== 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    const slotMins = h * 60 + m;
+
+    // Get day of week (0=Sun, 1=Mon... matching Google's format)
+    const day = new Date().getDay();
+
+    // Find periods for today
+    const todayPeriods = periods.filter(p => p.open?.day === day);
+    if (!todayPeriods.length) return "May be closed today";
+
+    // Check if slot time falls within any open period
+    for (const period of todayPeriods) {
+      const openH = Math.floor(period.open.hour);
+      const openM = period.open.minute || 0;
+      const closeH = Math.floor(period.close?.hour || 23);
+      const closeM = period.close?.minute || 59;
+      const openMins = openH * 60 + openM;
+      const closeMins = closeH * 60 + closeM;
+
+      if (slotMins >= openMins && slotMins <= closeMins) return null; // Open, no warning
+      if (slotMins < openMins) return `Opens at ${period.open.hour}:${String(period.open.minute||0).padStart(2,'0')} — consider arriving later`;
+    }
+    return "May be closed at this time";
+  } catch(e) { return null; }
+};
+
+// Single day endpoint — fast, called once per day
+app.post("/itinerary/day", async (req, res) => {
+  const { city, dates, dayNum, dayVibe, totalDays, travelProfile } = req.body;
+  if (!city || !dayNum) return res.status(400).json({ error: "city and dayNum required" });
+
+  // Build travel DNA context from quiz answers
+  const buildProfileContext = (p) => {
+    if (!p) return "";
+    const lines = [];
+    if (p.pace === "slow") lines.push("- Traveller prefers a slow pace — avoid cramming too many stops");
+    if (p.pace === "fast") lines.push("- Traveller likes packing a lot in — maximize activities");
+    if (p.sleep === "late") lines.push("- Traveller sleeps in — start day no earlier than 10am");
+    if (p.sleep === "early") lines.push("- Traveller is an early riser — can start at 7-8am");
+    if (p.food === "everything") lines.push("- Food is the highlight — prioritize exceptional restaurants and local food experiences");
+    if (p.food === "fuel") lines.push("- Food is secondary — keep meals quick and simple");
+    if (p.budget === "luxury") lines.push("- Luxury budget — recommend upscale venues, fine dining, premium experiences");
+    if (p.budget === "budget") lines.push("- Budget traveller — prioritize affordable, free, or low-cost options");
+    if (p.crowd === "hate") lines.push("- Avoids crowds — choose off-peak times, hidden gems, quiet spots");
+    if (p.crowd === "love") lines.push("- Loves energy and crowds — popular spots and lively areas are great");
+    if (p.companions === "solo") lines.push("- Travelling solo — single-friendly venues, solo dining comfortable spots");
+    if (p.companions === "partner") lines.push("- Travelling with a partner — romantic atmosphere welcome");
+    if (p.companions === "group") lines.push("- Travelling in a group — choose venues that work for multiple people");
+    if (p.vibe === "relax") lines.push("- Trip vibe is relaxation — avoid overscheduling, include downtime");
+    if (p.vibe === "immerse") lines.push("- Wants to live like a local — skip tourist traps, find authentic spots");
+    if (p.vibe === "explore") lines.push("- Wants to see and discover as much as possible");
+    return lines.length ? "\nTraveller profile:\n" + lines.join("\n") : "";
+  };
+
+  const profileContext = buildProfileContext(travelProfile);
+
+  const prompt = `You are an expert local travel curator — think of yourself as a well-traveled friend who lives in ${city} and knows every neighborhood intimately. You are NOT a generic travel guide. You give real, specific, opinionated recommendations.
+
+Plan Day ${dayNum} of ${totalDays} in ${city}.
+Trip dates: ${dates}
+Today's vibes: ${dayVibe || "open / flexible"}${profileContext}
+
+VIBE GUIDE:
+- Slow Morning: Start after 10am. First stop must be a neighborhood coffee shop, not a chain. Ease into the day.
+- Splurge Dinner: The meal of the trip. A restaurant worth making a reservation weeks in advance. Describe the ambiance, not just the food.
+- Local & Weird: Places locals actually go. No tourist traps. Hidden courtyards, underground bars, cult-favorite spots that don't appear on top-10 lists.
+- Street Food: Specific markets, stalls, or vendors. Name the dish, not just the place.
+- Nightlife: Real bars and clubs. Include what makes each one worth going to — the DJ, the crowd, the cocktails.
+- Cultural: Go beyond famous museums. Include lesser-known galleries, historic buildings, street art, or neighborhood architecture walks.
+- Adventurous: Specific physical experiences — a hike with a view, a surf lesson, a bike route. Include practical logistics.
+- Day Trip: A specific destination outside the city with how to get there and what to do.
+- Chill Afternoon: A park bench, a bookshop, a canal-side cafe. The antidote to over-tourism.
+
+QUALITY RULES:
+- Every place name must be REAL and SPECIFIC. No generic "a local cafe" — name it.
+- Every neighborhood must be accurate for ${city}. Don't invent areas.
+- The activity sentence must be cinematic and specific — describe what you'll actually experience, not just what the place is.
+- The must_know should be genuinely useful — best seat in the house, what to order, when to arrive, what to avoid.
+- The day theme should be poetic and evocative — 4-6 words that capture the soul of the day, not just a description.
+- Vary the pace: mix active and relaxed moments. Not every slot should be the same energy.
+- transit_from_prev and transit_mode MUST be consistent. The transit_mode determines the word used in transit_from_prev. Examples:
+  * transit_mode:"walk" → transit_from_prev:"8 min walk"
+  * transit_mode:"subway" → transit_from_prev:"12 min subway"  
+  * transit_mode:"taxi" → transit_from_prev:"10 min taxi"
+  * transit_mode:"uber" → transit_from_prev:"15 min Uber"
+  * transit_mode:"lyft" → transit_from_prev:"15 min Lyft"
+  * transit_mode:"bus" → transit_from_prev:"20 min bus"
+  * transit_mode:"tram" → transit_from_prev:"10 min tram"
+  * transit_mode:"tuk-tuk" → transit_from_prev:"8 min tuk-tuk"
+  * transit_mode:"ferry" → transit_from_prev:"25 min ferry"
+  * transit_mode:"bike" → transit_from_prev:"12 min bike"
+  * transit_mode:"drive" → transit_from_prev:"20 min drive"
+- Choose transit_mode based on realistic local transport in ${city}:
+  * If stops are within 10 min walk → use "walk"
+  * If stops are 10-20 min apart in a city with good subway/metro (Tokyo, NYC, Paris, London, Seoul, Singapore, Chicago, DC, Mexico City) → use "subway"
+  * If stops are 10-20 min apart in a city without subway → use "taxi", "uber", or "drive"
+  * If stops are 20+ min apart → use "uber", "taxi", or "drive" — NEVER "walk" for long distances
+  * Tuk-tuk in Bangkok, Chiang Mai, Siem Reap. Ferry in Venice, Amsterdam, Hong Kong. Tram in Lisbon, Melbourne. Bike in Amsterdam, Copenhagen.
+  * DO NOT default everything to walk — use the realistic primary transit mode for ${city}
+  Use the most realistic mode for ${city} — subway in Tokyo/NYC/Paris, tuk-tuk in Bangkok, ferry in Venice/Amsterdam, walk in compact city centers, uber/taxi for longer distances.
+- is_meal should be true for breakfast, lunch, dinner slots only.
+
+Return ONLY valid JSON, no markdown, no explanation:
+{"day":${dayNum},"theme":"Poetic 4-6 word theme","slots":[{"time":"9:00 AM","end_time":"10:30 AM","name":"Exact Real Place Name","category":"food","neighborhood":"Specific Neighborhood","activity":"One cinematic sentence describing the actual experience.","transit_from_prev":"8 min subway","transit_mode":"subway","price":"$$","must_know":"One genuinely useful insider tip.","is_meal":true,"highlight":false}]}
+
+Add "highlight":true to the ONE slot that is the standout experience of the day — the thing they'll remember most.`;
+
+  try {
+    const text = await callClaude(prompt);
+    const clean = text.replace(/```json|```/g, "").trim();
+    const first = clean.indexOf("{"); const last = clean.lastIndexOf("}");
+    if (first === -1) throw new Error("No JSON in response");
+    const parsed = JSON.parse(clean.slice(first, last + 1));
+
+    // Post-process: auto-correct transit_from_prev to match transit_mode
+    const modeWords = { walk:"walk", subway:"subway", taxi:"taxi", uber:"Uber", lyft:"Lyft", bus:"bus", tram:"tram", "tuk-tuk":"tuk-tuk", ferry:"ferry", bike:"bike", drive:"drive" };
+    (parsed.slots || []).forEach(slot => {
+      if (slot.transit_mode && slot.transit_from_prev) {
+        const word = modeWords[slot.transit_mode];
+        if (word) {
+          // Extract just the time number and reformat
+          const mins = slot.transit_from_prev.match(/\d+/)?.[0] || "10";
+          slot.transit_from_prev = `${mins} min ${word}`;
+        }
+      }
+    });
+
+    await enrichWithPhotos(parsed.slots || [], city);
+    res.json(parsed);
+  } catch(e) {
+    console.error("Day error:", e.response?.data || e.message);
+    res.status(500).json({ error: e.response?.data?.error?.message || e.message });
+  }
+});
+
+// Autocomplete endpoint
+app.get("/autocomplete", async (req, res) => {
+  const { q } = req.query;
+  if (!q || q.length < 2) return res.json({ suggestions: [] });
+
+  try {
+    const response = await axios.post(
+      "https://places.googleapis.com/v1/places:autocomplete",
+      {
+        input: q,
+        includedPrimaryTypes: ["locality", "administrative_area_level_1", "country", "tourist_attraction"],
+        languageCode: "en"
+      },
+      {
+        headers: {
+          "X-Goog-Api-Key": GOOGLE_KEY,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    const suggestions = (response.data?.suggestions || [])
+      .slice(0, 6)
+      .map(s => ({
+        name: s.placePrediction?.structuredFormat?.mainText?.text || s.placePrediction?.text?.text || "",
+        description: s.placePrediction?.structuredFormat?.secondaryText?.text || "",
+        placeId: s.placePrediction?.placeId || ""
+      }))
+      .filter(s => s.name);
+
+    res.json({ suggestions });
+  } catch(e) {
+    console.error("Autocomplete error:", e.response?.data || e.message);
+    res.json({ suggestions: [] });
+  }
+});
+
+// Place detail endpoint — Google Places (New API with fallback)
+app.post("/place", async (req, res) => {
+  const { name, city, category } = req.body;
+  if (!name || !city) return res.status(400).json({ error: "name and city required" });
+
+  try {
+    // Try new Places API first
+    const searchRes = await axios.post(
+      "https://places.googleapis.com/v1/places:searchText",
+      { textQuery: `${name} ${city}`, languageCode: "en" },
+      {
+        headers: {
+          "X-Goog-Api-Key": GOOGLE_KEY,
+          "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.websiteUri,places.nationalPhoneNumber,places.regularOpeningHours,places.photos,places.reviews,places.types,places.editorialSummary,places.shortFormattedAddress",
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    console.log("Places API response status:", searchRes.status);
+    console.log("Places API response:", JSON.stringify(searchRes.data).slice(0, 300));
+
+    const place = searchRes.data?.places?.[0];
+
+    if (!place) {
+      // Fallback: try old Places API text search
+      console.log("New API returned no results, trying old API...");
+      const oldRes = await axios.get(
+        "https://maps.googleapis.com/maps/api/place/textsearch/json",
+        { params: { query: `${name} ${city}`, key: GOOGLE_KEY } }
+      );
+      const oldPlace = oldRes.data?.results?.[0];
+      if (!oldPlace) return res.status(404).json({ error: "Place not found" });
+
+      // Get details from old API
+      const detailRes = await axios.get(
+        "https://maps.googleapis.com/maps/api/place/details/json",
+        { params: { place_id: oldPlace.place_id, fields: "name,rating,user_ratings_total,formatted_address,opening_hours,photos,reviews,price_level,website,formatted_phone_number,editorial_summary", key: GOOGLE_KEY } }
+      );
+      const d = detailRes.data?.result || {};
+      const photos = (d.photos || []).slice(0,6).map(p =>
+        `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${p.photo_reference}&key=${GOOGLE_KEY}`
+      );
+      const priceMap = { 0:"Free",1:"$",2:"$$",3:"$$$",4:"$$$$" };
+      return res.json({
+        name: d.name || name,
+        address: d.formatted_address || "",
+        neighborhood: "",
+        rating: d.rating ? d.rating.toFixed(1) : null,
+        totalRatings: d.user_ratings_total || null,
+        price: priceMap[d.price_level] || null,
+        category: category || "",
+        website: d.website || null,
+        phone: d.formatted_phone_number || null,
+        hours: d.opening_hours?.weekday_text || [],
+        isOpenNow: d.opening_hours?.open_now ?? null,
+        description: d.editorial_summary?.overview || null,
+        photos,
+        tips: (d.reviews||[]).map(r=>({ text:r.text, rating:r.rating, author:r.author_name, time:r.relative_time_description })),
+        mapsUrl: `https://www.google.com/maps/place/?q=place_id:${oldPlace.place_id}`
+      });
+    }
+
+    const placeId = place.id;
+
+    // Build photo URLs using new API
+    const photos = (place.photos || []).slice(0, 6).map(p =>
+      `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${GOOGLE_KEY}`
+    );
+
+    // Format reviews
+    const reviews = (place.reviews || []).map(r => ({
+      text: r.text?.text || "",
+      rating: r.rating,
+      author: r.authorAttribution?.displayName || "Google user",
+      time: r.relativePublishTimeDescription || ""
+    }));
+
+    // Price map
+    const priceMap = { "PRICE_LEVEL_FREE":"Free", "PRICE_LEVEL_INEXPENSIVE":"$", "PRICE_LEVEL_MODERATE":"$$", "PRICE_LEVEL_EXPENSIVE":"$$$", "PRICE_LEVEL_VERY_EXPENSIVE":"$$$$" };
+
+    const hours = place.regularOpeningHours?.weekdayDescriptions || [];
+    const isOpenNow = place.regularOpeningHours?.openNow ?? null;
+
+    res.json({
+      name: place.displayName?.text || name,
+      address: place.formattedAddress || "",
+      neighborhood: place.shortFormattedAddress || "",
+      rating: place.rating ? place.rating.toFixed(1) : null,
+      totalRatings: place.userRatingCount || null,
+      price: priceMap[place.priceLevel] || null,
+      category: place.types?.[0]?.replace(/_/g, " ") || category || "",
+      website: place.websiteUri || null,
+      phone: place.nationalPhoneNumber || null,
+      hours,
+      isOpenNow,
+      description: place.editorialSummary?.text || null,
+      photos,
+      tips: reviews,
+      mapsUrl: `https://www.google.com/maps/place/?q=place_id:${placeId}`
+    });
+  } catch(e) {
+    console.error("Place error full:", JSON.stringify(e.response?.data || e.message));
+    res.status(500).json({ error: e.response?.data?.error?.message || e.message });
+  }
+});
+
+// Validate time change endpoint
+app.post("/validate-time", async (req, res) => {
+  const { slot, newTime, allSlots } = req.body;
+  if (!slot || !newTime) return res.status(400).json({ error: "slot and newTime required" });
+
+  const prompt = `A user wants to move "${slot.name}" (currently at ${slot.time}–${slot.end_time}) to ${newTime}.
+
+Other slots in the day:
+${allSlots.filter(s => s.name !== slot.name).map(s => `- ${s.name}: ${s.time}–${s.end_time}`).join("\n")}
+
+Assess if this change is feasible. Consider:
+- Does the new time conflict with another slot?
+- Are there any real-world constraints (e.g. restaurants not open at that hour, museums closed at night)?
+- Is there enough time between slots?
+
+If feasible: calculate a realistic end_time (add same duration as original slot).
+If not feasible: explain why briefly and suggest an alternative time.
+
+Respond ONLY in this JSON format:
+{"feasible":true,"newTime":"3:00 PM","newEndTime":"4:30 PM","message":"Moved to 3:00 PM — no conflicts."}
+OR
+{"feasible":false,"message":"That conflicts with dinner at 7:00 PM. Try 5:00 PM instead."}`;
+
+  try {
+    const text = await callClaude(prompt, 2, 300);
+    const clean = text.replace(/```json|```/g, "").trim();
+    const first = clean.indexOf("{");
+    const last = clean.lastIndexOf("}");
+    if (first === -1) throw new Error("No JSON");
+    const result = JSON.parse(clean.slice(first, last + 1));
+    res.json(result);
+  } catch(e) {
+    console.error("Validate time error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Chat edit endpoint — AI makes live edits to a day
+app.post("/chat-edit", async (req, res) => {
+  const { city, message, currentDay, profile } = req.body;
+  if (!message || !currentDay) return res.status(400).json({ error: "message and currentDay required" });
+
+  const profileContext = profile ? (() => {
+    const lines = [];
+    if (profile.pace === "slow") lines.push("prefers slow pace");
+    if (profile.food === "everything") lines.push("food-focused");
+    if (profile.budget === "luxury") lines.push("luxury budget");
+    if (profile.budget === "budget") lines.push("budget traveller");
+    if (profile.crowd === "hate") lines.push("avoids crowds");
+    return lines.length ? `(Traveller: ${lines.join(", ")})` : "";
+  })() : "";
+
+  // Step 1: Get the updated itinerary as pure JSON
+  const jsonPrompt = `Edit this ${city} itinerary for Day ${currentDay.day}.
+
+Current slots:
+${JSON.stringify(currentDay.slots, null, 2)}
+
+Request: "${message}" ${profileContext}
+
+Rules:
+- Keep existing slots unless asked to remove/replace
+- Add real named places in ${city} if requested
+- No time overlaps
+- Same JSON schema: {time, end_time, name, category, neighborhood, activity, transit_from_prev, price, must_know, is_meal, highlight}
+- is_meal true only for meals
+
+Return ONLY the complete updated JSON object, nothing else:
+{"day":${currentDay.day},"theme":"${currentDay.theme}","slots":[...]}`;
+
+  // Step 2: Get a friendly message about what changed
+  const msgPrompt = `In one short sentence, describe what you would change to a ${city} itinerary given this request: "${message}". Be specific and friendly. No JSON.`;
+
+  try {
+    // Run both in parallel
+    const [jsonText, msgText] = await Promise.all([
+      callClaude(jsonPrompt, 2, 3000),
+      callClaude(msgPrompt, 1, 200)
+    ]);
+
+    const message_text = msgText?.trim() || "Done! I've updated your itinerary.";
+
+    // Parse JSON response
+    const clean = jsonText.replace(/```json|```/g, "").trim();
+    const first = clean.indexOf("{");
+    const last = clean.lastIndexOf("}");
+
+    if (first === -1) {
+      return res.json({ message: message_text + " (No changes made — try rephrasing)" });
+    }
+
+    const updatedDay = JSON.parse(clean.slice(first, last + 1));
+    if (!updatedDay.slots?.length) {
+      return res.json({ message: message_text + " (Something went wrong with the edit)" });
+    }
+
+    // Enrich new slots with photos
+    const existingNames = new Set(currentDay.slots.map(s => s.name));
+    const newSlots = updatedDay.slots.filter(s => !existingNames.has(s.name));
+    if (newSlots.length > 0) {
+      await enrichWithPhotos(newSlots, city);
+    }
+    // Preserve existing photos
+    updatedDay.slots = updatedDay.slots.map(s => {
+      const existing = currentDay.slots.find(e => e.name === s.name);
+      return existing?.photo ? { ...s, photo: existing.photo } : s;
+    });
+
+    res.json({ updatedDay, message: message_text });
+  } catch(e) {
+    console.error("Chat edit error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Full itinerary endpoint (kept for compatibility)
+app.post("/itinerary", async (req, res) => {
+  const { city, dates, totalDays = 1, moodContext = "" } = req.body;
+  if (!city) return res.status(400).json({ error: "city required" });
+  const dayVibes = moodContext.split("\n").filter(Boolean);
+  try {
+    const days = await Promise.all(
+      Array.from({ length: totalDays }, (_, i) => {
+        const dayVibe = dayVibes[i] || "open / flexible";
+        return axios.post(`http://localhost:${PORT}/itinerary/day`, { city, dates, dayNum: i+1, dayVibe, totalDays })
+          .then(r => r.data);
+      })
+    );
+    res.json({ city, dates, days });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log("Wandr backend running on :" + PORT);
+  console.log("Foursquare photos: ✅ enabled");
+});
