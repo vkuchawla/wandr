@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { T, GLOBAL_CSS, NAV_H, MONTHS_FULL, MONTHS_SHORT, DAYS } from "./constants.jsx";
+import { T, GLOBAL_CSS, NAV_H, MONTHS_FULL, MONTHS_SHORT, DAYS, CITY_PHOTOS } from "./constants.jsx";
 function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, refreshKey }) {
   const [city, setCity]     = useState("");
   const [startDate, setStart] = useState(null);
@@ -217,27 +217,34 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
             const parts = (trip.dates||"").split("–")[0].trim();
             const d = new Date(parts + ", " + new Date().getFullYear());
             const diff = Math.ceil((d - today) / 86400000);
+            const cityKey = trip.city?.split(",")[0]?.trim();
+            const photo = CITY_PHOTOS[cityKey];
             return (
               <div key={i} onClick={()=>onOpenTrip(trip)}
-                style={{background:`linear-gradient(135deg,${T.ink},#2d1f10)`,borderRadius:20,padding:"18px 20px",cursor:"pointer",boxShadow:"0 6px 24px rgba(28,22,18,0.15)",marginBottom:10,position:"relative",overflow:"hidden"}}>
-                <div style={{position:"absolute",top:-20,right:-20,fontSize:80,opacity:0.04,fontFamily:"serif"}}>✦</div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                  <div style={{background:"rgba(255,255,255,0.08)",borderRadius:10,padding:"4px 10px",display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"0.1em"}}>
-                      {diff === 0 ? "Today" : diff === 1 ? "Tomorrow" : `In ${diff} days`}
-                    </span>
+                style={{borderRadius:20,cursor:"pointer",boxShadow:"0 6px 24px rgba(28,22,18,0.18)",marginBottom:10,position:"relative",overflow:"hidden",minHeight:130,background:T.ink}}>
+                {photo && (
+                  <img src={photo} alt={cityKey} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.45}} onError={e=>e.target.style.display="none"}/>
+                )}
+                <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,rgba(28,22,18,0.85) 0%,rgba(45,31,16,0.7) 100%)"}}/>
+                <div style={{position:"relative",zIndex:1,padding:"18px 20px"}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                    <div style={{background:"rgba(255,255,255,0.12)",backdropFilter:"blur(6px)",borderRadius:10,padding:"4px 10px"}}>
+                      <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.7)",textTransform:"uppercase",letterSpacing:"0.1em"}}>
+                        {diff === 0 ? "✈ Today" : diff === 1 ? "✈ Tomorrow" : `✈ In ${diff} days`}
+                      </span>
+                    </div>
+                    <span style={{fontSize:11,color:"rgba(255,255,255,0.35)"}}>{trip.dates}</span>
                   </div>
-                  <span style={{fontSize:12,color:"rgba(255,255,255,0.3)"}}>{trip.dates}</span>
-                </div>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"white",marginBottom:4}}>
-                  {trip.city?.split(",")[0]}
-                </div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <div style={{fontSize:12,color:"rgba(255,255,255,0.4)"}}>
-                    {Array.isArray(trip.days)?trip.days.length:0} days planned
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:700,color:"white",marginBottom:6,textShadow:"0 2px 8px rgba(0,0,0,0.3)"}}>
+                    {cityKey}
                   </div>
-                  <div style={{background:T.accent,borderRadius:10,padding:"5px 12px",fontSize:12,fontWeight:700,color:"white"}}>
-                    View itinerary →
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <div style={{fontSize:12,color:"rgba(255,255,255,0.45)"}}>
+                      {Array.isArray(trip.days)?trip.days.length:0} days planned
+                    </div>
+                    <div style={{background:T.accent,borderRadius:10,padding:"5px 14px",fontSize:12,fontWeight:700,color:"white",boxShadow:"0 3px 10px rgba(200,75,47,0.4)"}}>
+                      View plan →
+                    </div>
                   </div>
                 </div>
               </div>
@@ -253,19 +260,24 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
           <div style={{display:"flex",gap:10,overflowX:"auto",padding:"0 16px 4px"}}>
             {friendActivity.filter(t => !user || t.user_id !== user.id).slice(0,6).map((trip,i)=>{
               const vibes = (trip.mood_context||"").split("\n").flatMap(l=>l.split(":")[1]?.split(",").map(v=>v.trim())||[]).filter(Boolean).slice(0,2);
+              const cityKey = trip.city?.split(",")[0]?.trim();
+              const photo = CITY_PHOTOS[cityKey];
               return (
-                <div key={i} style={{flexShrink:0,width:160,background:T.white,borderRadius:16,overflow:"hidden",border:`1px solid ${T.dust}`,boxShadow:"0 2px 8px rgba(28,22,18,0.05)"}}>
-                  <div style={{background:`linear-gradient(135deg,${T.ink},#2d1f10)`,padding:"12px 12px 10px"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                      <div style={{width:26,height:26,borderRadius:"50%",background:T.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"white",flexShrink:0}}>
-                        {trip.profiles?.name?.[0]||"?"}
+                <div key={i} style={{flexShrink:0,width:155,background:T.white,borderRadius:16,overflow:"hidden",border:`1px solid ${T.dust}`,boxShadow:"0 2px 8px rgba(28,22,18,0.05)"}}>
+                  <div style={{background:`linear-gradient(135deg,${T.ink},#2d1f10)`,padding:"12px 12px 10px",position:"relative",overflow:"hidden",minHeight:80}}>
+                    {photo && <img src={photo} alt={cityKey} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.3}} onError={e=>e.target.style.display="none"}/>}
+                    <div style={{position:"relative",zIndex:1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:8}}>
+                        <div style={{width:24,height:24,borderRadius:"50%",background:T.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"white",flexShrink:0}}>
+                          {trip.profiles?.name?.[0]||"?"}
+                        </div>
+                        <div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.8)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{trip.profiles?.name||"Wanderer"}</div>
                       </div>
-                      <div style={{fontSize:11,fontWeight:700,color:"white",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{trip.profiles?.name||"Wanderer"}</div>
+                      <div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:"white",marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {cityKey}
+                      </div>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>{trip.days?.length||0} {trip.days?.length===1?"day":"days"}</div>
                     </div>
-                    <div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:"white",marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                      {trip.city?.split(",")[0]}
-                    </div>
-                    <div style={{fontSize:10,color:"rgba(255,255,255,0.35)"}}>{trip.days?.length||0} {trip.days?.length===1?"day":"days"}</div>
                   </div>
                   {vibes.length > 0 && (
                     <div style={{padding:"8px 10px",display:"flex",flexWrap:"wrap",gap:4}}>
@@ -289,19 +301,26 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
             {pastTrips.length > 3 && <button onClick={()=>onOpenTrip(null)} style={{background:"none",border:"none",fontSize:12,color:T.accent,fontWeight:700,cursor:"pointer",padding:0}}>See all →</button>}
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {pastTrips.slice(0,3).map((trip,i)=>(
-              <div key={i} onClick={()=>onOpenTrip(trip)}
-                style={{background:T.white,borderRadius:16,padding:"13px 16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",border:`1px solid ${T.dust}`}}>
-                <div style={{width:38,height:38,borderRadius:10,background:`linear-gradient(135deg,${T.ink},#2d1f10)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>
-                  {trip.emoji||"✦"}
+            {pastTrips.slice(0,3).map((trip,i)=>{
+              const cityKey = trip.city?.split(",")[0]?.trim();
+              const photo = CITY_PHOTOS[cityKey];
+              return (
+                <div key={i} onClick={()=>onOpenTrip(trip)}
+                  style={{background:T.white,borderRadius:16,display:"flex",alignItems:"stretch",cursor:"pointer",border:`1px solid ${T.dust}`,overflow:"hidden"}}>
+                  <div style={{width:56,flexShrink:0,background:T.ink,position:"relative",overflow:"hidden"}}>
+                    {photo && <img src={photo} alt={cityKey} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.7}} onError={e=>e.target.style.display="none"}/>}
+                    {!photo && <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,opacity:0.5}}>{trip.emoji||"✦"}</div>}
+                  </div>
+                  <div style={{flex:1,minWidth:0,padding:"12px 14px",display:"flex",alignItems:"center",gap:0}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:T.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cityKey}</div>
+                      <div style={{fontSize:11,color:T.inkFaint}}>{trip.dates||"No dates"}</div>
+                    </div>
+                    <div style={{fontSize:16,color:T.dust,flexShrink:0}}>›</div>
+                  </div>
                 </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:700,color:T.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{trip.city?.split(",")[0]}</div>
-                  <div style={{fontSize:11,color:T.inkFaint}}>{trip.dates||"No dates"}</div>
-                </div>
-                <div style={{fontSize:16,color:T.dust}}>›</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -353,12 +372,36 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
         </div>
       )}
 
-      {/* Empty state */}
+      {/* City discovery row — always shown below search */}
       {savedTrips.length === 0 && friendActivity.filter(t => !user || t.user_id !== user.id).length === 0 && (
-        <div style={{padding:"32px 20px",textAlign:"center"}}>
-          <div style={{fontSize:32,marginBottom:12}}>🌍</div>
-          <div style={{fontSize:15,fontWeight:700,color:T.ink,marginBottom:6}}>Your adventures start here</div>
-          <div style={{fontSize:13,color:T.inkFaint,lineHeight:1.6,maxWidth:260,margin:"0 auto"}}>Search a city above, set your vibe, and let AI plan your perfect trip.</div>
+        <div style={{padding:"24px 0 0"}}>
+          {/* Inspirational label */}
+          <div style={{padding:"0 16px",display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",color:T.inkFaint}}>Inspire me</div>
+            <button onClick={()=>onStart("","","") && false} style={{background:"none",border:"none",fontSize:11,color:T.accent,fontWeight:700,cursor:"pointer",padding:0}}>See all →</button>
+          </div>
+          <div style={{display:"flex",gap:10,overflowX:"auto",padding:"0 16px 4px"}}>
+            {CITY_PILLS.slice(0,8).map(c => {
+              const photo = CITY_PHOTOS[c];
+              return (
+                <div key={c} onClick={()=>onStart(c,"")}
+                  style={{flexShrink:0,width:130,height:110,borderRadius:16,overflow:"hidden",cursor:"pointer",background:T.ink,position:"relative",boxShadow:"0 3px 12px rgba(28,22,18,0.1)"}}>
+                  {photo && <img src={photo} alt={c} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.55}} onError={e=>e.target.style.display="none"}/>}
+                  <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,transparent 30%,rgba(0,0,0,0.7) 100%)"}}/>
+                  <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"8px 10px"}}>
+                    <div style={{fontFamily:"'Playfair Display',serif",fontSize:14,fontWeight:700,color:"white",lineHeight:1.2}}>{c}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* CTA text */}
+          <div style={{padding:"28px 20px 0",textAlign:"center"}}>
+            <div style={{fontSize:13,color:T.inkFaint,lineHeight:1.7,maxWidth:280,margin:"0 auto"}}>
+              Search any city above, set your vibe, and let AI build your perfect day.
+            </div>
+          </div>
         </div>
       )}
     </div>

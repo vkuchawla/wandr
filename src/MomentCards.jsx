@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { NAV_H, T, TRANSIT_COLORS, TRANSIT_ICONS } from "./constants.jsx";
 function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, setSelectedPlace, BUCKET_COLORS, getBucket, TRANSIT_ICONS, TRANSIT_COLORS, onUpdateSlots }) {
   const [activeSlotIdx, setActiveSlotIdx] = useState(0);
@@ -53,9 +53,13 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
     setTimeValidating(false);
   };
 
+  const [photoLoaded, setPhotoLoaded] = useState(false);
   const [showSwipeHint, setShowSwipeHint] = useState(() => {
     return !localStorage.getItem("wandr-seen-swipe") && slots.length > 1;
   });
+
+  // Reset photo load state when slot changes
+  useEffect(() => { setPhotoLoaded(false); }, [activeSlotIdx]);
   const touchStartX = useRef(null);
   const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
   const handleTouchEnd = (e) => {
@@ -103,8 +107,23 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
         {/* Hero — photo or rich gradient */}
         {slot.photo ? (
           <div style={{position:"relative",height:280,flexShrink:0}}>
-            <img src={slot.photo} alt={slot.name} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>e.target.parentNode.style.background=T.ink}/>
-            <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.1) 0%,transparent 40%,rgba(28,22,18,0.8) 100%)"}}/>
+            {/* Shimmer while photo loads */}
+            {!photoLoaded && (
+              <div style={{
+                position:"absolute",inset:0,
+                background:`linear-gradient(90deg,${cardBg} 0%,rgba(255,255,255,0.05) 50%,${cardBg} 100%)`,
+                backgroundSize:"200% 100%",
+                animation:"shimmer 1.5s ease infinite"
+              }}/>
+            )}
+            <img
+              src={slot.photo}
+              alt={slot.name}
+              onLoad={() => setPhotoLoaded(true)}
+              onError={e => { e.target.style.display="none"; setPhotoLoaded(true); }}
+              style={{width:"100%",height:"100%",objectFit:"cover",opacity:photoLoaded?1:0,transition:"opacity 0.4s ease"}}
+            />
+            <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.15) 0%,transparent 35%,rgba(28,22,18,0.85) 100%)"}}/>
             {/* Top bar — full width */}
             <div style={{position:"absolute",top:0,left:0,right:0,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={e=>e.stopPropagation()}>
               <div/>{/* spacer */}
@@ -117,7 +136,7 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
               </div>
             </div>
             <div style={{position:"absolute",bottom:16,left:16,right:16}}>
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"white",lineHeight:1.2,marginBottom:4}}>{slot.name}</div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"white",lineHeight:1.2,marginBottom:4,textShadow:"0 2px 8px rgba(0,0,0,0.3)"}}>{slot.name}</div>
               <div style={{fontSize:12,color:"rgba(255,255,255,0.7)",display:"flex",alignItems:"center",gap:4}}>
                 <span>📍</span>{slot.neighborhood}
               </div>

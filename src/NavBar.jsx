@@ -54,9 +54,20 @@ function NavBar({ screen, setScreen }) {
         const active = screen === tab.id;
         return (
           <button key={tab.id} onClick={()=>setScreen(tab.id)}
-            style={{flex:1,padding:"10px 4px 8px",background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,transition:"opacity 0.15s"}}>
-            <NavIcon id={tab.id} active={active}/>
-            <span style={{fontSize:10,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",color:active?T.accent:T.inkFaint,transition:"color 0.2s"}}>{tab.label}</span>
+            style={{flex:1,padding:"8px 4px 6px",background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,transition:"opacity 0.15s",position:"relative"}}>
+            {/* Active pill indicator */}
+            <div style={{
+              position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",
+              width: active ? 24 : 0,
+              height: 2,
+              borderRadius: "0 0 2px 2px",
+              background: T.accent,
+              transition: "width 0.25s cubic-bezier(0.34,1.56,0.64,1)",
+            }}/>
+            <div style={{transform:active?"scale(1.08)":"scale(1)",transition:"transform 0.2s ease"}}>
+              <NavIcon id={tab.id} active={active}/>
+            </div>
+            <span style={{fontSize:9,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",color:active?T.accent:T.inkFaint,transition:"color 0.2s"}}>{tab.label}</span>
           </button>
         );
       })}

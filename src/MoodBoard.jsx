@@ -173,10 +173,13 @@ function MoodBoard({ city, dates, onBuild, onBack, profile, remixContext }) {
 
       {/* Build bar */}
       <div style={{position:"sticky",bottom:0,padding:"14px 22px 28px",background:`linear-gradient(to top,${T.cream} 70%,transparent)`,paddingBottom:NAV_H+8}}>
-        {totalVibes>0&&<div style={{textAlign:"center",fontSize:12,color:T.inkFaint,marginBottom:8,fontStyle:"italic"}}>{totalVibes} vibe{totalVibes!==1?"s":""} across {board.filter(d=>d.length>0).length} day{board.filter(d=>d.length>0).length!==1?"s":""}</div>}
-        <button onClick={()=>totalVibes>0&&onBuild(buildContext())} disabled={totalVibes===0}
-          style={{width:"100%",padding:17,borderRadius:16,background:totalVibes>0?`linear-gradient(135deg,${T.ink},#2d1f10)`:T.dust,border:"none",color:totalVibes>0?T.cream:T.inkFaint,fontSize:15,fontWeight:800,cursor:totalVibes>0?"pointer":"default",boxShadow:totalVibes>0?"0 8px 28px rgba(28,22,18,0.2)":"none",transition:"all 0.2s",letterSpacing:"0.02em"}}>
-          {totalVibes===0?"Add some vibes to build →":"Build my itinerary ✦"}
+        {totalVibes>0
+          ? <div style={{textAlign:"center",fontSize:12,color:T.inkFaint,marginBottom:8,fontStyle:"italic"}}>{totalVibes} vibe{totalVibes!==1?"s":""} across {board.filter(d=>d.length>0).length} day{board.filter(d=>d.length>0).length!==1?"s":""}</div>
+          : <div style={{textAlign:"center",fontSize:11,color:T.inkFaint,marginBottom:8}}>No vibes selected — AI will pick the best mix</div>
+        }
+        <button onClick={()=>onBuild(buildContext())}
+          style={{width:"100%",padding:17,borderRadius:16,background:totalVibes>0?`linear-gradient(135deg,${T.ink},#2d1f10)`:`linear-gradient(135deg,${T.accent},#9b2020)`,border:"none",color:T.white,fontSize:15,fontWeight:800,cursor:"pointer",boxShadow:totalVibes>0?"0 8px 28px rgba(28,22,18,0.2)":"0 6px 20px rgba(200,75,47,0.25)",transition:"all 0.2s",letterSpacing:"0.02em"}}>
+          {totalVibes===0?"Surprise me ✦":"Build my itinerary ✦"}
         </button>
       </div>
     </div>

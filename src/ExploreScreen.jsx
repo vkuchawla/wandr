@@ -1,30 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { T, GLOBAL_CSS, NAV_H, EXPLORE_CITIES, VIBES } from "./constants.jsx";
-
-const CITY_PHOTOS = {
-  "New Orleans": "https://images.unsplash.com/photo-1571893544028-06b07af6dade?w=600&q=80",
-  "Tokyo":       "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=600&q=80",
-  "Barcelona":   "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=600&q=80",
-  "Nashville":   "https://images.unsplash.com/photo-1545579133-99bb5ab189bd?w=600&q=80",
-  "Lisbon":      "https://images.unsplash.com/photo-1558370781-d6196949e317?w=600&q=80",
-  "Miami":       "https://images.unsplash.com/photo-1533106497176-45ae19e68ba2?w=600&q=80",
-  "Paris":       "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=600&q=80",
-  "Mexico City": "https://images.unsplash.com/photo-1585464231875-d9ef1f5ad396?w=600&q=80",
-  "New York":    "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=600&q=80",
-  "Kyoto":       "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=600&q=80",
-  "Amsterdam":   "https://images.unsplash.com/photo-1512470876302-972faa2aa9a4?w=600&q=80",
-  "Buenos Aires":"https://images.unsplash.com/photo-1589909202802-8f4aadce1849?w=600&q=80",
-  "Cape Town":   "https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=600&q=80",
-  "Seoul":       "https://images.unsplash.com/photo-1601621915196-2621bfb0cd6e?w=600&q=80",
-  "London":      "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&q=80",
-  "Marrakech":   "https://images.unsplash.com/photo-1597212618440-806262de4f6b?w=600&q=80",
-  "Istanbul":    "https://images.unsplash.com/photo-1541432901042-2d8bd64b4a9b?w=600&q=80",
-  "Bali":        "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600&q=80",
-  "Bangkok":     "https://images.unsplash.com/photo-1563492065599-3520f775eeed?w=600&q=80",
-  "Copenhagen":  "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=600&q=80",
-  "Porto":       "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=600&q=80",
-  "Singapore":   "https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=600&q=80",
-};
+import { T, GLOBAL_CSS, NAV_H, EXPLORE_CITIES, VIBES, CITY_PHOTOS } from "./constants.jsx";
 
 const CITY_VIBES = {
   "New Orleans": ["Jazz clubs","Creole food","Garden District"],
@@ -184,24 +159,49 @@ function ExploreScreen({ onSelectCity, supabase, user }) {
         </div>
       </div>
 
-      {/* Featured 2x2 grid */}
-      <div style={{padding:"0 16px 16px"}}>
-        <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",color:T.inkFaint,marginBottom:10}}>Popular right now</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          {featured.map(c => {
+      {/* Hero city — large card */}
+      {featured[0] && (() => {
+        const c = featured[0];
+        const photo = CITY_PHOTOS[c.city];
+        const count = tripCounts[c.city];
+        const vibes = (CITY_VIBES[c.city] || []).slice(0, 3);
+        return (
+          <div style={{padding:"0 16px 12px"}}>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",color:T.inkFaint,marginBottom:10}}>Popular right now</div>
+            <div onClick={()=>onSelectCity(c.city)}
+              style={{borderRadius:20,overflow:"hidden",cursor:"pointer",height:200,background:c.bg,boxShadow:"0 6px 28px rgba(28,22,18,0.15)",position:"relative"}}>
+              {photo&&<img src={photo} alt={c.city} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}} onError={e=>e.target.style.display="none"}/>}
+              <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.1) 0%,transparent 30%,rgba(0,0,0,0.75) 100%)"}}/>
+              {count>0&&<div style={{position:"absolute",top:14,right:14,background:"rgba(0,0,0,0.55)",backdropFilter:"blur(6px)",borderRadius:10,padding:"4px 10px",fontSize:10,color:"white",fontWeight:700}}>{count} trip{count!==1?"s":""}</div>}
+              <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"16px 16px 14px"}}>
+                <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:c.accent,marginBottom:4}}>{c.tag}</div>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"white",lineHeight:1.15,marginBottom:8}}>{c.city}</div>
+                {vibes.length > 0 && (
+                  <div style={{display:"flex",gap:6}}>
+                    {vibes.map(v=><span key={v} style={{fontSize:10,fontWeight:600,color:"rgba(255,255,255,0.7)",background:"rgba(255,255,255,0.12)",backdropFilter:"blur(6px)",borderRadius:8,padding:"3px 9px"}}>{v}</span>)}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Featured 3-city horizontal scroll */}
+      <div style={{padding:"0 0 12px"}}>
+        <div style={{display:"flex",gap:10,overflowX:"auto",padding:"0 16px 4px"}}>
+          {featured.slice(1,4).map(c => {
             const photo = CITY_PHOTOS[c.city];
             const count = tripCounts[c.city];
             return (
-              <div key={c.city} onClick={()=>onSelectCity(c.city)} style={{position:"relative"}}
-              onMouseEnter={e=>e.currentTarget.querySelector(".rate-btn")?.style&&(e.currentTarget.querySelector(".rate-btn").style.opacity="1")}
-              onMouseLeave={e=>e.currentTarget.querySelector(".rate-btn")?.style&&(e.currentTarget.querySelector(".rate-btn").style.opacity="0")}
-                style={{borderRadius:18,overflow:"hidden",cursor:"pointer",position:"relative",height:150,background:c.bg,boxShadow:"0 4px 20px rgba(28,22,18,0.12)"}}>
+              <div key={c.city} onClick={()=>onSelectCity(c.city)}
+                style={{flexShrink:0,width:140,borderRadius:16,overflow:"hidden",cursor:"pointer",height:120,background:c.bg,boxShadow:"0 3px 14px rgba(28,22,18,0.1)",position:"relative"}}>
                 {photo&&<img src={photo} alt={c.city} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}} onError={e=>e.target.style.display="none"}/>}
                 <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.05) 0%,rgba(0,0,0,0.65) 100%)"}}/>
-                {count>0&&<div style={{position:"absolute",top:10,right:10,background:"rgba(0,0,0,0.55)",backdropFilter:"blur(6px)",borderRadius:10,padding:"3px 8px",fontSize:10,color:"white",fontWeight:700}}>{count} trip{count!==1?"s":""}</div>}
-                <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"10px 12px"}}>
-                  <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:c.accent,marginBottom:2}}>{c.tag}</div>
-                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:700,color:"white",lineHeight:1.2}}>{c.city}</div>
+                {count>0&&<div style={{position:"absolute",top:8,right:8,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(4px)",borderRadius:8,padding:"2px 7px",fontSize:9,color:"white",fontWeight:700}}>{count}</div>}
+                <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"8px 10px"}}>
+                  <div style={{fontSize:8,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:c.accent,marginBottom:2}}>{c.tag}</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:"white",lineHeight:1.2}}>{c.city}</div>
                 </div>
               </div>
             );
@@ -213,7 +213,7 @@ function ExploreScreen({ onSelectCity, supabase, user }) {
       <div style={{padding:"0 16px"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
           <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:T.inkFaint}}>All destinations</div>
-          <div style={{fontSize:11,color:T.inkFaint}}>{ALL_CITIES.length} cities — or search any</div>
+          <div style={{fontSize:11,color:T.inkFaint}}>{ALL_CITIES.length} cities</div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {ALL_CITIES.slice(4).map(c => {
@@ -221,36 +221,29 @@ function ExploreScreen({ onSelectCity, supabase, user }) {
             const count = tripCounts[c.city];
             const vibes = ((CITY_VIBES[c.city] || CITY_VIBES_EXTRA[c.city]) || []).slice(0,3);
             return (
-              <div key={c.city} onClick={()=>onSelectCity(c.city)} style={{position:"relative"}}
-              onMouseEnter={e=>e.currentTarget.querySelector(".rate-btn")?.style&&(e.currentTarget.querySelector(".rate-btn").style.opacity="1")}
-              onMouseLeave={e=>e.currentTarget.querySelector(".rate-btn")?.style&&(e.currentTarget.querySelector(".rate-btn").style.opacity="0")}
-                style={{borderRadius:16,overflow:"hidden",cursor:"pointer",background:T.white,border:`1px solid ${T.dust}`,display:"flex",alignItems:"stretch"}}>
-                <div style={{width:80,flexShrink:0,background:c.bg,position:"relative",overflow:"hidden",minHeight:80}}>
+              <div key={c.city} onClick={()=>onSelectCity(c.city)}
+                style={{borderRadius:16,overflow:"hidden",cursor:"pointer",background:T.white,border:`1px solid ${T.dust}`,display:"flex",alignItems:"stretch",transition:"box-shadow 0.15s"}}
+                onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 16px rgba(28,22,18,0.1)"}
+                onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+                <div style={{width:84,flexShrink:0,background:c.bg,position:"relative",overflow:"hidden",minHeight:80}}>
                   {photo&&<img src={photo} alt={c.city} style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}} onError={e=>e.target.style.display="none"}/>}
-                  <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.15)"}}/>
-                  {!photo&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,opacity:0.4}}>{c.emoji}</div>}
+                  <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.12)"}}/>
+                  {!photo&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,opacity:0.45}}>{c.emoji}</div>}
                 </div>
-                <div style={{flex:1,padding:"12px 12px 10px",minWidth:0,display:"flex",flexDirection:"column",justifyContent:"center"}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
-                    <div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:T.ink,lineHeight:1.2}}>{c.city}</div>
-                    {count>0&&<div style={{fontSize:10,color:T.sage,fontWeight:700,flexShrink:0,marginLeft:8}}>{count} trip{count!==1?"s":""}</div>}
+                <div style={{flex:1,padding:"11px 12px 10px",minWidth:0,display:"flex",flexDirection:"column",justifyContent:"center"}}>
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:3}}>
+                    <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,color:T.ink,lineHeight:1.15}}>{c.city}</div>
+                    {count>0&&<div style={{fontSize:10,color:T.sage,fontWeight:700,flexShrink:0,marginLeft:8,marginTop:2,background:`${T.sage}15`,borderRadius:8,padding:"2px 6px"}}>{count} trips</div>}
                   </div>
-                  <div style={{fontSize:10,color:T.inkFaint,marginBottom:vibes.length>0?6:0}}>{c.tag}</div>
+                  <div style={{fontSize:11,color:T.inkFaint,marginBottom:vibes.length>0?7:0}}>{c.tag}</div>
                   {vibes.length>0&&(
                     <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                       {vibes.map(v=><span key={v} style={{fontSize:10,fontWeight:600,color:T.inkLight,background:T.paper,borderRadius:8,padding:"3px 8px",border:`1px solid ${T.dust}`}}>{v}</span>)}
                     </div>
                   )}
                 </div>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",paddingRight:12,gap:8}}>
-                  <div style={{color:T.dust,fontSize:16}}>›</div>
-                  {user && (
-                    <button className="rate-btn"
-                      onClick={e=>{ e.stopPropagation(); setQuickRate({placeName:c.city, city:c.city}); }}
-                      style={{fontSize:10,fontWeight:700,color:T.accent,background:`${T.accent}15`,border:`1px solid ${T.accent}30`,borderRadius:8,padding:"3px 6px",cursor:"pointer",whiteSpace:"nowrap",opacity:0,transition:"opacity 0.15s"}}>
-                      ★ Rate
-                    </button>
-                  )}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"center",paddingRight:14}}>
+                  <div style={{color:"#c8b8a8",fontSize:18,fontWeight:300}}>›</div>
                 </div>
               </div>
             );

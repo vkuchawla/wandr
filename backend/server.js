@@ -241,11 +241,13 @@ Add "highlight":true to the ONE slot that is the standout experience of the day 
       }
     });
 
-    // Return immediately without waiting for enrichment
-    res.json(parsed);
+    // Wait up to 4.5s for Foursquare photos, then respond either way
+    await Promise.race([
+      enrichWithPhotos(parsed.slots || [], city),
+      new Promise(r => setTimeout(r, 4500))
+    ]).catch(() => {});
 
-    // Enrich in background (non-blocking)
-    enrichWithPhotos(parsed.slots || [], city).catch(() => {});
+    res.json(parsed);
   } catch(e) {
     console.error("Day error:", e.response?.data || e.message);
     res.status(500).json({ error: e.response?.data?.error?.message || e.message });
