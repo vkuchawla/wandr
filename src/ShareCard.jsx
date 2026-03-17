@@ -36,6 +36,17 @@ function ShareCard({ city, dates, days, moodContext, onClose }) {
       .catch(() => {});
   };
 
+  const nativeShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: `✦ ${displayCity} Itinerary — Wandr`,
+        text: copyText,
+      }).catch(() => {});
+    } else {
+      copy(); // fallback to copy
+    }
+  };
+
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(28,22,18,0.85)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn 0.2s ease"}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{background:T.cream,borderRadius:"28px 28px 0 0",padding:"16px 16px 40px",width:"100%",maxWidth:480,animation:"slideUp 0.3s ease",fontFamily:"'DM Sans',sans-serif"}}>
@@ -94,9 +105,13 @@ function ShareCard({ city, dates, days, moodContext, onClose }) {
 
         {/* Actions */}
         <div style={{display:"flex",gap:10}}>
+          <button onClick={nativeShare}
+            style={{flex:1,padding:15,borderRadius:16,background:`linear-gradient(135deg,${T.accent},#9b2020)`,border:"none",color:"white",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,boxShadow:"0 6px 20px rgba(200,75,47,0.25)"}}>
+            {navigator.share ? "↗ Share" : copied ? "✓ Copied!" : "📋 Copy itinerary"}
+          </button>
           <button onClick={copy}
-            style={{flex:1,padding:15,borderRadius:16,background:copied?T.sage:T.ink,border:"none",color:"white",fontSize:14,fontWeight:700,cursor:"pointer",transition:"background 0.2s",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-            {copied ? "✓ Copied!" : "📋 Copy itinerary"}
+            style={{padding:"15px 18px",borderRadius:16,background:T.paper,border:`1px solid ${T.dust}`,color:copied?T.sage:T.inkLight,fontSize:14,fontWeight:700,cursor:"pointer"}}>
+            {copied ? "✓" : "📋"}
           </button>
           <button onClick={onClose}
             style={{padding:"15px 18px",borderRadius:16,background:T.paper,border:`1px solid ${T.dust}`,color:T.inkLight,fontSize:14,fontWeight:700,cursor:"pointer"}}>
@@ -104,7 +119,7 @@ function ShareCard({ city, dates, days, moodContext, onClose }) {
           </button>
         </div>
         <div style={{textAlign:"center",marginTop:10,fontSize:11,color:T.inkFaint}}>
-          Screenshot this card to share with friends ✦
+          Screenshot or share with friends ✦
         </div>
       </div>
     </div>

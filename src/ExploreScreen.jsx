@@ -68,7 +68,28 @@ const ALL_CITIES = [...EXPLORE_CITIES, ...MORE_CITIES];
 
 const BACKEND = "https://wandr-62i6.onrender.com";
 
-function ExploreScreen({ onSelectCity, supabase }) {
+function ExploreScreen({ onSelectCity, supabase, user }) {
+  const [quickRate, setQuickRate] = useState(null); // {placeName, city}
+  const [quickStars, setQuickStars] = useState(0);
+  const [quickNote, setQuickNote] = useState("");
+  const [quickSaved, setQuickSaved] = useState(false);
+
+  const submitQuickRate = async () => {
+    if (!quickStars || !supabase || !user) return;
+    await supabase.from("place_ratings").insert({
+      user_id: user.id,
+      place_name: quickRate.placeName,
+      city: quickRate.city,
+      stars: quickStars,
+      note: quickNote.trim() || null,
+      is_public: true,
+      rated_at: new Date().toISOString()
+    });
+    setQuickSaved(true);
+    setTimeout(() => {
+      setQuickRate(null); setQuickStars(0); setQuickNote(""); setQuickSaved(false);
+    }, 1500);
+  };
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -171,7 +192,9 @@ function ExploreScreen({ onSelectCity, supabase }) {
             const photo = CITY_PHOTOS[c.city];
             const count = tripCounts[c.city];
             return (
-              <div key={c.city} onClick={()=>onSelectCity(c.city)}
+              <div key={c.city} onClick={()=>onSelectCity(c.city)} style={{position:"relative"}}
+              onMouseEnter={e=>e.currentTarget.querySelector(".rate-btn")?.style&&(e.currentTarget.querySelector(".rate-btn").style.opacity="1")}
+              onMouseLeave={e=>e.currentTarget.querySelector(".rate-btn")?.style&&(e.currentTarget.querySelector(".rate-btn").style.opacity="0")}
                 style={{borderRadius:18,overflow:"hidden",cursor:"pointer",position:"relative",height:150,background:c.bg,boxShadow:"0 4px 20px rgba(28,22,18,0.12)"}}>
                 {photo&&<img src={photo} alt={c.city} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}} onError={e=>e.target.style.display="none"}/>}
                 <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.05) 0%,rgba(0,0,0,0.65) 100%)"}}/>
@@ -198,7 +221,9 @@ function ExploreScreen({ onSelectCity, supabase }) {
             const count = tripCounts[c.city];
             const vibes = ((CITY_VIBES[c.city] || CITY_VIBES_EXTRA[c.city]) || []).slice(0,3);
             return (
-              <div key={c.city} onClick={()=>onSelectCity(c.city)}
+              <div key={c.city} onClick={()=>onSelectCity(c.city)} style={{position:"relative"}}
+              onMouseEnter={e=>e.currentTarget.querySelector(".rate-btn")?.style&&(e.currentTarget.querySelector(".rate-btn").style.opacity="1")}
+              onMouseLeave={e=>e.currentTarget.querySelector(".rate-btn")?.style&&(e.currentTarget.querySelector(".rate-btn").style.opacity="0")}
                 style={{borderRadius:16,overflow:"hidden",cursor:"pointer",background:T.white,border:`1px solid ${T.dust}`,display:"flex",alignItems:"stretch"}}>
                 <div style={{width:80,flexShrink:0,background:c.bg,position:"relative",overflow:"hidden",minHeight:80}}>
                   {photo&&<img src={photo} alt={c.city} style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}} onError={e=>e.target.style.display="none"}/>}
@@ -217,7 +242,16 @@ function ExploreScreen({ onSelectCity, supabase }) {
                     </div>
                   )}
                 </div>
-                <div style={{display:"flex",alignItems:"center",paddingRight:12,color:T.dust,fontSize:16}}>›</div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",paddingRight:12,gap:8}}>
+                  <div style={{color:T.dust,fontSize:16}}>›</div>
+                  {user && (
+                    <button className="rate-btn"
+                      onClick={e=>{ e.stopPropagation(); setQuickRate({placeName:c.city, city:c.city}); }}
+                      style={{fontSize:10,fontWeight:700,color:T.accent,background:`${T.accent}15`,border:`1px solid ${T.accent}30`,borderRadius:8,padding:"3px 6px",cursor:"pointer",whiteSpace:"nowrap",opacity:0,transition:"opacity 0.15s"}}>
+                      ★ Rate
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -234,6 +268,39 @@ function ExploreScreen({ onSelectCity, supabase }) {
           </button>
         </div>
       </div>
+      {/* Quick Rate Sheet */}
+      {quickRate && (
+        <div style={{position:"fixed",inset:0,background:"rgba(28,22,18,0.7)",zIndex:400,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:"'DM Sans',sans-serif"}}
+          onClick={()=>{ setQuickRate(null); setQuickStars(0); setQuickNote(""); }}>
+          <div onClick={e=>e.stopPropagation()} style={{background:T.white,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:480,padding:"24px 20px 40px"}}>
+            <div style={{width:40,height:4,borderRadius:2,background:T.dust,margin:"0 auto 20px"}}/>
+            {quickSaved ? (
+              <div style={{textAlign:"center",padding:"20px 0"}}>
+                <div style={{fontSize:36,marginBottom:8}}>✦</div>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:T.ink}}>Shared with friends!</div>
+              </div>
+            ) : (
+              <>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:T.ink,marginBottom:4}}>{quickRate.placeName}</div>
+                <div style={{fontSize:13,color:T.inkFaint,marginBottom:20}}>📍 {quickRate.city}</div>
+                <div style={{display:"flex",justifyContent:"center",gap:8,marginBottom:16}}>
+                  {[1,2,3,4,5].map(s=>(
+                    <button key={s} onClick={()=>setQuickStars(s)}
+                      style={{fontSize:40,background:"none",border:"none",cursor:"pointer",color:s<=quickStars?T.gold:T.dust,transform:s===quickStars?"scale(1.2)":"scale(1)",transition:"all 0.1s"}}>★</button>
+                  ))}
+                </div>
+                <input value={quickNote} onChange={e=>setQuickNote(e.target.value)}
+                  placeholder="Add a note for friends… (optional)"
+                  style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1.5px solid ${T.dust}`,background:T.cream,color:T.ink,fontSize:13,outline:"none",marginBottom:14,fontFamily:"'DM Sans',sans-serif"}}/>
+                <button onClick={submitQuickRate} disabled={!quickStars || !user}
+                  style={{width:"100%",padding:"14px 0",borderRadius:16,background:quickStars&&user?`linear-gradient(135deg,${T.accent},#9b2020)`:T.dust,border:"none",color:"white",fontSize:14,fontWeight:700,cursor:quickStars&&user?"pointer":"default",boxShadow:quickStars&&user?"0 6px 20px rgba(200,75,47,0.25)":"none"}}>
+                  {!user ? "Sign in to rate" : !quickStars ? "Tap a star to rate" : "Share with friends ✦"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

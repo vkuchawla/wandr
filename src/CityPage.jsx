@@ -1,8 +1,46 @@
 import { useState, useEffect } from "react";
-import { T, GLOBAL_CSS, NAV_H, VIBE_COLORS_MAP } from "./constants.jsx";
-function CityPage({ city, dates, supabase, user, onPlan, onRemix, onBack }) {
+import { GLOBAL_CSS, NAV_H, T, VIBE_COLORS_MAP } from "./constants.jsx";
+function CityPage({ city, dates, supabase, user, onPlan, onRemix, onBack, onSetDates }) {
   const [friendTrips, setFriendTrips] = useState([]);
   const [loading, setLoading]         = useState(true);
+  const [startDate, setStartDate]     = useState(null);
+  const [endDate, setEndDate]         = useState(null);
+  const [picking, setPicking]         = useState(null);
+  const [calOffset, setCalOffset]     = useState(0);
+  const [hoverDay, setHoverDay]       = useState(null);
+
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const MONTHS_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const today = new Date(); today.setHours(0,0,0,0);
+  const fmt = d => d ? `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}` : null;
+
+  const buildCal = () => {
+    const base = new Date(); base.setDate(1); base.setMonth(base.getMonth()+calOffset);
+    return { year:base.getFullYear(), month:base.getMonth(), firstDay:new Date(base.getFullYear(),base.getMonth(),1).getDay(), daysInMonth:new Date(base.getFullYear(),base.getMonth()+1,0).getDate(), label:`${MONTHS_FULL[base.getMonth()]} ${base.getFullYear()}` };
+  };
+  const cal = buildCal();
+
+  const inRange = day => {
+    const d = new Date(cal.year,cal.month,day);
+    if (startDate && hoverDay && !endDate) return d>startDate && d<=hoverDay;
+    if (startDate && endDate) return d>startDate && d<endDate;
+    return false;
+  };
+
+  const handleDay = day => {
+    const d = new Date(cal.year, cal.month, day);
+    if (d < today) return;
+    if (!startDate || picking==="start") { setStartDate(d); setEndDate(null); setPicking("end"); }
+    else if (picking==="end") {
+      if (d < startDate) { setStartDate(d); setEndDate(null); }
+      else {
+        setEndDate(d);
+        setPicking(null);
+        const dateStr = `${fmt(startDate)} – ${fmt(d)}, ${d.getFullYear()}`;
+        if (onSetDates) onSetDates(dateStr);
+      }
+    }
+  };
 
   useEffect(() => { loadFriendTrips(); }, [city]);
 
@@ -151,11 +189,58 @@ function CityPage({ city, dates, supabase, user, onPlan, onRemix, onBack }) {
         )}
       </div>
 
-      {/* CTA */}
-      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,paddingTop:24,paddingLeft:20,paddingRight:20,paddingBottom:NAV_H+12,background:`linear-gradient(to top,${T.cream} 60%,transparent)`}}>
+      {/* CTA with date picker */}
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,paddingTop:16,paddingLeft:16,paddingRight:16,paddingBottom:NAV_H+12,background:`linear-gradient(to top,${T.cream} 70%,transparent)`}}>
+        
+        {/* Date picker */}
+        <div style={{background:T.white,borderRadius:18,padding:"12px 14px",marginBottom:10,boxShadow:"0 2px 12px rgba(28,22,18,0.08)",border:`1px solid ${T.dust}`}}>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:T.inkFaint,marginBottom:8}}>When are you going?</div>
+          <div style={{display:"flex",gap:8}}>
+            {[["start","Depart",startDate],["end","Return",endDate]].map(([key,lbl,val])=>(
+              <button key={key} onClick={()=>setPicking(picking===key?null:key)}
+                style={{flex:1,padding:"9px 12px",borderRadius:12,border:`1.5px solid ${picking===key?T.accent:T.dust}`,background:picking===key?"#fdf8f4":T.cream,cursor:"pointer",textAlign:"left",transition:"all 0.15s"}}>
+                <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:T.inkFaint,marginBottom:1}}>{lbl}</div>
+                <div style={{fontSize:13,fontWeight:700,color:val?T.ink:T.inkFaint}}>{val?fmt(val):"Select date"}</div>
+              </button>
+            ))}
+            {(startDate||endDate) && (
+              <button onClick={()=>{setStartDate(null);setEndDate(null);setPicking(null);if(onSetDates)onSetDates("");}}
+                style={{padding:"0 10px",borderRadius:12,border:`1.5px solid ${T.dust}`,background:"none",color:T.inkFaint,cursor:"pointer",fontSize:16}}>✕</button>
+            )}
+          </div>
+
+          {/* Calendar */}
+          {picking && (
+            <div style={{marginTop:10,animation:"fadeIn 0.2s ease"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                <button onClick={()=>setCalOffset(o=>o-1)} style={{background:"none",border:"none",cursor:"pointer",color:T.inkLight,fontSize:18,padding:"0 4px"}}>‹</button>
+                <span style={{fontSize:12,fontWeight:700,color:T.ink}}>{cal.label}</span>
+                <button onClick={()=>setCalOffset(o=>o+1)} style={{background:"none",border:"none",cursor:"pointer",color:T.inkLight,fontSize:18,padding:"0 4px"}}>›</button>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,textAlign:"center"}}>
+                {["S","M","T","W","T","F","S"].map((d,i)=><div key={i} style={{fontSize:9,color:T.inkFaint,padding:"2px 0",fontWeight:700}}>{d}</div>)}
+                {Array(cal.firstDay).fill(null).map((_,i)=><div key={`e${i}`}/>)}
+                {Array(cal.daysInMonth).fill(null).map((_,i)=>{
+                  const day=i+1; const d=new Date(cal.year,cal.month,day);
+                  const isPast=d<today, isStart=startDate&&d.toDateString()===startDate.toDateString(), isEnd=endDate&&d.toDateString()===endDate.toDateString(), isIn=inRange(day);
+                  return (
+                    <button key={day} onClick={()=>handleDay(day)}
+                      onMouseEnter={()=>{if(picking==="end"&&startDate)setHoverDay(new Date(cal.year,cal.month,day));}}
+                      onMouseLeave={()=>setHoverDay(null)}
+                      disabled={isPast}
+                      style={{padding:"5px 1px",borderRadius:6,border:"none",background:isStart||isEnd?T.accent:isIn?"rgba(200,75,47,0.1)":"transparent",color:isPast?T.dust:isStart||isEnd?T.white:T.ink,fontSize:11,cursor:isPast?"default":"pointer",fontWeight:isStart||isEnd?700:400}}>
+                      {day}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         <button onClick={onPlan}
-          style={{width:"100%",padding:17,borderRadius:18,background:`linear-gradient(135deg,${T.ink},#2d1f10)`,border:"none",color:T.cream,fontSize:15,fontWeight:800,cursor:"pointer",boxShadow:"0 8px 28px rgba(28,22,18,0.2)"}}>
-          Plan my own trip ✦
+          style={{width:"100%",padding:15,borderRadius:16,background:`linear-gradient(135deg,${T.accent},#9b2020)`,border:"none",color:T.white,fontSize:15,fontWeight:800,cursor:"pointer",boxShadow:"0 6px 20px rgba(200,75,47,0.3)"}}>
+          Plan my trip ✦
         </button>
       </div>
     </div>

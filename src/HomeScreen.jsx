@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { T, GLOBAL_CSS, NAV_H, MONTHS_FULL, MONTHS_SHORT, DAYS } from "./constants.jsx";
-function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user }) {
+function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, refreshKey }) {
   const [city, setCity]     = useState("");
   const [startDate, setStart] = useState(null);
   const [endDate, setEnd]     = useState(null);
@@ -29,7 +29,7 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user }
       const finalQuery = currentUser ? query.neq("user_id", currentUser.id) : query;
       finalQuery.then(({ data }) => setFriendActivity(data || []));
     });
-  }, []);
+  }, [refreshKey]);
 
   // Split saved trips into upcoming and past
   const today = new Date();
@@ -45,6 +45,31 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user }
   const pastTrips = savedTrips.filter(t => !upcomingTrips.includes(t));
 
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [quickPlan, setQuickPlan] = useState(null); // {city} when quick plan sheet is open
+  const [quickVibes, setQuickVibes] = useState([]);
+  const [quickDates, setQuickDates] = useState("");
+
+  const QUICK_VIBES = [
+    { id:"slow-morning", emoji:"☕", label:"Slow mornings" },
+    { id:"street-food", emoji:"🍜", label:"Street food" },
+    { id:"cultural", emoji:"🏛", label:"Cultural" },
+    { id:"nightlife", emoji:"🍸", label:"Nightlife" },
+    { id:"adventurous", emoji:"🧗", label:"Adventure" },
+    { id:"local-weird", emoji:"🗺", label:"Off the beaten path" },
+    { id:"splurge-dinner", emoji:"🍷", label:"Fine dining" },
+    { id:"chill-afternoon", emoji:"🌿", label:"Laid back" },
+  ];
+
+  const handleQuickBuild = () => {
+    if (!quickPlan) return;
+    const moodCtx = quickVibes.length > 0
+      ? `Day 1: ${quickVibes.map(v => QUICK_VIBES.find(q=>q.id===v)?.label||v).join(", ")}`
+      : "";
+    onStart(quickPlan, quickDates, moodCtx);
+    setQuickPlan(null);
+    setQuickVibes([]);
+    setQuickDates("");
+  };
 
   const handleCityChange = (val) => {
     setCity(val);
@@ -71,9 +96,11 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user }
   };
 
   const selectSuggestion = (s) => {
-    setCity(s.description ? `${s.name}, ${s.description}` : s.name);
+    const full = s.description ? `${s.name}, ${s.description}` : s.name;
+    setCity(full);
     setSuggestions([]);
     setShowSuggestions(false);
+    setQuickPlan(full);
   };
 
   const fmt   = d => d ? `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}` : null;
@@ -174,8 +201,8 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user }
               </div>
             ) : null}
           </div>
-          <button onClick={()=>city.trim()&&onStart(city.trim(),"")}
-            style={{flexShrink:0,padding:"12px 18px",borderRadius:14,background:city.trim()?T.ink:T.dust,border:"none",color:"white",fontSize:14,fontWeight:800,cursor:city.trim()?"pointer":"default",transition:"background 0.2s"}}>
+          <button onClick={()=>{ if(city.trim()){ setQuickPlan(city.trim()); setShowSuggestions(false); }}}
+            style={{flexShrink:0,padding:"12px 18px",borderRadius:14,background:city.trim()?`linear-gradient(135deg,${T.accent},#9b2020)`:T.dust,border:"none",color:"white",fontSize:14,fontWeight:800,cursor:city.trim()?"pointer":"default",transition:"background 0.2s",boxShadow:city.trim()?"0 4px 14px rgba(200,75,47,0.3)":"none"}}>
             →
           </button>
         </div>
@@ -238,7 +265,7 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user }
                     <div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:"white",marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       {trip.city?.split(",")[0]}
                     </div>
-                    <div style={{fontSize:10,color:"rgba(255,255,255,0.35)"}}>{trip.days?.length||0} days</div>
+                    <div style={{fontSize:10,color:"rgba(255,255,255,0.35)"}}>{trip.days?.length||0} {trip.days?.length===1?"day":"days"}</div>
                   </div>
                   {vibes.length > 0 && (
                     <div style={{padding:"8px 10px",display:"flex",flexWrap:"wrap",gap:4}}>
@@ -275,6 +302,53 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user }
                 <div style={{fontSize:16,color:T.dust}}>›</div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quick Plan Sheet */}
+      {quickPlan && (
+        <div style={{position:"fixed",inset:0,background:"rgba(28,22,18,0.6)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:"'DM Sans',sans-serif"}}
+          onClick={()=>setQuickPlan(null)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:T.white,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:480,padding:"24px 20px 40px",animation:"slideUp 0.3s ease"}}>
+            {/* Handle */}
+            <div style={{width:40,height:4,borderRadius:2,background:T.dust,margin:"0 auto 20px"}}/>
+            
+            {/* City name */}
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,color:T.ink,marginBottom:4}}>
+              {quickPlan.split(",")[0]}
+            </div>
+            <div style={{fontSize:13,color:T.inkFaint,marginBottom:20}}>What's the vibe? Pick all that apply.</div>
+
+            {/* Vibe chips */}
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:20}}>
+              {QUICK_VIBES.map(v=>{
+                const sel = quickVibes.includes(v.id);
+                return (
+                  <button key={v.id}
+                    onClick={()=>setQuickVibes(prev=>sel?prev.filter(x=>x!==v.id):[...prev,v.id])}
+                    style={{padding:"8px 14px",borderRadius:20,background:sel?T.ink:T.paper,border:`1.5px solid ${sel?"transparent":T.dust}`,color:sel?T.white:T.ink,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all 0.15s"}}>
+                    <span>{v.emoji}</span> {v.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Dates — optional */}
+            <input
+              value={quickDates}
+              onChange={e=>setQuickDates(e.target.value)}
+              placeholder="Dates (optional) — e.g. Mar 18 – Mar 21, 2026"
+              style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1.5px solid ${T.dust}`,background:T.cream,color:T.ink,fontSize:13,outline:"none",marginBottom:16,fontFamily:"'DM Sans',sans-serif"}}/>
+
+            {/* Build button */}
+            <button onClick={handleQuickBuild}
+              style={{width:"100%",padding:"15px 0",borderRadius:16,background:`linear-gradient(135deg,${T.accent},#9b2020)`,border:"none",color:"white",fontSize:15,fontWeight:800,cursor:"pointer",boxShadow:"0 6px 20px rgba(200,75,47,0.3)"}}>
+              Build my trip ✦
+            </button>
+            <div style={{textAlign:"center",fontSize:11,color:T.inkFaint,marginTop:10}}>
+              {quickVibes.length === 0 ? "No vibes selected — we'll choose the best mix" : `${quickVibes.length} vibe${quickVibes.length>1?"s":""} selected`}
+            </div>
           </div>
         </div>
       )}

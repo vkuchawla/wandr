@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { OnboardingSplash } from "./OnboardingSplash.jsx";
 
 const BACKEND = "https://wandr-62i6.onrender.com";
 
@@ -39,6 +40,7 @@ export default function App() {
   }, [savedTrips]);
   const [profile, setProfile]       = useState(null);
   const [openTrip, setOpenTrip]     = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [user, setUser]             = useState(null);
   const [authGate, setAuthGate]     = useState(null); // null | "save" | "social"
 
@@ -55,7 +57,9 @@ export default function App() {
         loadProfile(session.user.id);
         loadTrips(session.user.id);
       } else {
-        setScreen(prev => prev === "loading" ? "home" : prev);
+        // Show splash for new users, unless they've seen it before
+        const seen = localStorage.getItem("wandr-seen-splash");
+        setScreen(prev => prev === "loading" ? (seen ? "home" : "splash") : prev);
       }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -146,7 +150,17 @@ export default function App() {
     // Not logged in — trip is saved locally, will sync when they sign in
   };
 
-  const handleStart = (c, d) => { setCity(c); setDates(d); setScreen("city"); };
+  const handleStart = (c, d, mood) => {
+    setCity(c);
+    setDates(d || "");
+    if (mood !== undefined) {
+      // Quick plan — has vibes already, skip CityPage and MoodBoard
+      setMoodContext(mood);
+      setScreen(mood ? "itinerary" : "mood");
+    } else {
+      setScreen("city");
+    }
+  };
   const handleBuild = (ctx) => { setMoodContext(ctx); setScreen("itinerary"); };
   const handleOpenTrip = (trip) => {
     if (!trip) { setScreen("saved"); return; }
@@ -163,25 +177,46 @@ export default function App() {
   return (
     <div style={{width:"100%",minHeight:"100vh",background:"#e8e0d0",display:"flex",justifyContent:"center"}}>
       <div style={{width:"100%",maxWidth:480,minHeight:"100vh",background:T.cream,position:"relative",boxShadow:"0 0 80px rgba(28,22,18,0.15)"}}>
+        {screen==="splash"      && <OnboardingSplash onGetStarted={()=>{ localStorage.setItem("wandr-seen-splash","1"); setScreen("auth"); }}/>}
         {screen==="auth"        && <AuthScreen supabase={supabase} onSkip={()=>setScreen("onboarding")}/>}
         {screen==="onboarding"  && <ProfileScreen profile={null} onSaveProfile={handleSaveProfile} isOnboarding={true} supabase={supabase}/>}
-        {screen==="home"        && <HomeScreen onStart={handleStart} savedTrips={savedTrips} profile={profile} onOpenTrip={handleOpenTrip} supabase={supabase} user={user}/>}
+        {screen==="home"        && <HomeScreen onStart={handleStart} savedTrips={savedTrips} profile={profile} onOpenTrip={handleOpenTrip} supabase={supabase} user={user} refreshKey={refreshKey}/>}
         {screen==="profile"     && !user && <SignInPrompt supabase={supabase}/>}
         {screen==="profile"     && user  && <ProfileScreen profile={profile} onSaveProfile={handleSaveProfile} supabase={supabase} savedTrips={savedTrips} onOpenTrip={handleOpenTrip}/>}
-        {screen==="explore"     && <ExploreScreen onSelectCity={(c)=>{setCity(c);setScreen("city");}} supabase={supabase}/>}
+        {screen==="explore"     && <ExploreScreen onSelectCity={(c)=>{setCity(c);setScreen("city");}} supabase={supabase} user={user}/>}
         {screen==="social" && <SocialScreen supabase={supabase} user={user} onRemix={(trip)=>{ setCity(trip.city); setDates(trip.dates||""); setMoodContext(trip.mood_context||""); setScreen("mood"); }} onPlanCity={(c)=>{ setCity(c); setDates(""); setScreen("city"); }}/>}
-        {screen==="city" && <CityPage city={city} dates={dates} supabase={supabase} user={user} onPlan={()=>setScreen("mood")} onRemix={(trip)=>{ setMoodContext(trip.mood_context||""); setScreen("mood"); }} onBack={()=>setScreen("home")}/>}
+        {screen==="city" && <CityPage city={city} dates={dates} supabase={supabase} user={user} onPlan={()=>setScreen("mood")} onRemix={(trip)=>{ setMoodContext(trip.mood_context||""); setScreen("mood"); }} onBack={()=>setScreen("home")} onSetDates={(d)=>setDates(d)}/>}
         {screen==="mood"        && <MoodBoard city={city} dates={dates} onBuild={handleBuild} onBack={()=>setScreen("city")} profile={profile} remixContext={moodContext}/>}
         {screen==="itinerary"   && <ItineraryView city={city} dates={dates} moodContext={moodContext} profile={profile} onBack={()=>setScreen("mood")} onSave={handleSaveTrip} supabase={supabase} user={user}/>}
         {screen==="saved"       && <SavedTripsScreen savedTrips={savedTrips} onOpenTrip={handleOpenTrip} onPlanNew={()=>setScreen("home")} onDeleteTrip={async (trip) => {
-          // Remove from state
+          // 1. Remove from local state immediately
           setSavedTrips(prev => prev.filter(t => !(t.city === trip.city && t.dates === trip.dates)));
-          // Remove from localStorage
+          setRefreshKey(k => k + 1); // trigger home screen re-fetch
+          // 2. Clear openTrip if it's the one being deleted
+          if (openTrip?.city === trip.city && openTrip?.dates === trip.dates) setOpenTrip(null);
+          // 3. Remove from localStorage
           const local = JSON.parse(localStorage.getItem("wandr-trips") || "[]");
           localStorage.setItem("wandr-trips", JSON.stringify(local.filter(t => !(t.city === trip.city && t.dates === trip.dates))));
-          // Remove from Supabase
+          // 4. Remove from Supabase — match by city AND dates to avoid deleting other trips to same city
           if (supabase && user) {
-            await supabase.from("trips").delete().eq("user_id", user.id).eq("city", trip.city);
+            const { data: found } = await supabase.from("trips")
+              .select("id")
+              .eq("user_id", user.id)
+              .eq("city", trip.city)
+              .eq("dates", trip.dates || "")
+              .limit(1);
+            if (found?.[0]?.id) {
+              await supabase.from("trips").delete().eq("id", found[0].id);
+              // Delete ratings linked by trip_id
+              await supabase.from("place_ratings").delete().eq("trip_id", found[0].id);
+            } else {
+              await supabase.from("trips").delete().eq("user_id", user.id).eq("city", trip.city);
+            }
+            // Also delete any ratings for this city by this user (catches null trip_id ratings)
+            await supabase.from("place_ratings")
+              .delete()
+              .eq("user_id", user.id)
+              .eq("city", trip.city.split(",")[0].trim());
           }
         }}/>}
         {screen==="trip-detail" && openTrip && (

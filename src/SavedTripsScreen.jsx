@@ -14,15 +14,22 @@ function SavedTripsScreen({ savedTrips, onOpenTrip, onPlanNew, onDeleteTrip }) {
   };
 
   if (savedTrips.length === 0) return (
-    <div style={{minHeight:"100vh",background:T.cream,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,padding:32,fontFamily:"'DM Sans',sans-serif",paddingBottom:NAV_H}}>
+    <div style={{minHeight:"100vh",background:T.cream,fontFamily:"'DM Sans',sans-serif",paddingBottom:NAV_H}}>
       <style>{GLOBAL_CSS}</style>
-      <div style={{fontFamily:"'Playfair Display',serif",fontSize:56,color:T.dust,lineHeight:1}}>✦</div>
-      <div style={{fontSize:18,fontWeight:700,color:T.ink}}>No trips yet</div>
-      <div style={{fontSize:14,color:T.inkFaint,textAlign:"center",lineHeight:1.6,maxWidth:240}}>Build your first itinerary and save it — it'll live here.</div>
-      <button onClick={onPlanNew}
-        style={{padding:"14px 28px",borderRadius:16,background:`linear-gradient(135deg,${T.accent},#9b2020)`,border:"none",color:T.white,fontSize:14,fontWeight:700,cursor:"pointer",marginTop:8,boxShadow:"0 6px 20px rgba(200,75,47,0.25)"}}>
-        Plan a trip ✦
-      </button>
+      <div style={{background:"linear-gradient(160deg,#1c1612 0%,#2d1f10 100%)",padding:"52px 20px 40px",textAlign:"center"}}>
+        <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.22em",textTransform:"uppercase",color:"rgba(196,154,60,0.7)",marginBottom:12}}>✦ YOUR TRIPS</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:32,fontWeight:900,color:"white",marginBottom:8}}>No trips yet.</div>
+        <div style={{fontSize:14,color:"rgba(255,255,255,0.4)",lineHeight:1.6}}>Plan your first adventure.</div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:48,gap:16}}>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:48,color:T.dust,lineHeight:1}}>✦</div>
+        <div style={{fontSize:15,fontWeight:700,color:T.ink}}>Your adventures start here</div>
+        <div style={{fontSize:13,color:T.inkFaint,textAlign:"center",lineHeight:1.6,maxWidth:240}}>Search a city, set your vibe, and let AI build your perfect trip.</div>
+        <button onClick={onPlanNew}
+          style={{padding:"14px 28px",borderRadius:16,background:`linear-gradient(135deg,${T.accent},#9b2020)`,border:"none",color:T.white,fontSize:14,fontWeight:700,cursor:"pointer",marginTop:8,boxShadow:"0 6px 20px rgba(200,75,47,0.25)"}}>
+          Plan a trip ✦
+        </button>
+      </div>
     </div>
   );
 

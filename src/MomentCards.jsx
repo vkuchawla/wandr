@@ -53,12 +53,18 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
     setTimeValidating(false);
   };
 
-  // Touch swipe handling
+  const [showSwipeHint, setShowSwipeHint] = useState(() => {
+    return !localStorage.getItem("wandr-seen-swipe") && slots.length > 1;
+  });
   const touchStartX = useRef(null);
   const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
   const handleTouchEnd = (e) => {
     if (touchStartX.current === null) return;
     const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 30) {
+      setShowSwipeHint(false);
+      localStorage.setItem("wandr-seen-swipe", "1");
+    }
     if (Math.abs(diff) > 50) {
       if (diff > 0 && activeSlotIdx < slots.length-1) setActiveSlotIdx(i=>i+1);
       if (diff < 0 && activeSlotIdx > 0) setActiveSlotIdx(i=>i-1);
@@ -73,9 +79,15 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
     evening: "linear-gradient(135deg,#2d1a2d,#8b1a4a)"
   };
   const bucket = getBucket(slot?.time);
-  const cardBg = isCompleted ? "#f0f0f0" : isActive ? T.sage : slot?.highlight ? T.ink : bucketGradients[bucket] || T.white;
-  const textColor = (slot?.highlight || isActive || bucket==="evening") && !isCompleted ? "white" : T.ink;
-  const subtextColor = (slot?.highlight || isActive || bucket==="evening") && !isCompleted ? "rgba(255,255,255,0.6)" : T.inkFaint;
+  // Stable card backgrounds — never change mid-render to prevent flicker
+  const STABLE_BG = {
+    morning:   "linear-gradient(145deg,#1a0e00 0%,#4a2c00 40%,#7a4a10 100%)",
+    afternoon: "linear-gradient(145deg,#0a1f14 0%,#1a4028 40%,#2d6040 100%)",
+    evening:   "linear-gradient(145deg,#0d0514 0%,#2d0a28 40%,#4a0f3a 100%)"
+  };
+  const cardBg = isCompleted ? "#f0f0f0" : STABLE_BG[bucket] || STABLE_BG.morning;
+  const textColor = isCompleted ? T.inkFaint : "white";
+  const subtextColor = isCompleted ? T.inkFaint : "rgba(255,255,255,0.6)";
 
   if (!slot) return null;
 
@@ -85,7 +97,7 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
       <div
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        style={{borderRadius:24,overflow:"hidden",boxShadow:"0 12px 40px rgba(28,22,18,0.15)",marginBottom:12,minHeight:480,display:"flex",flexDirection:"column",position:"relative",background:isCompleted?"#f0f0f0":isActive?T.sage:slot.highlight?T.ink:T.white,cursor:"pointer"}}
+        style={{borderRadius:24,overflow:"hidden",boxShadow:"0 12px 40px rgba(28,22,18,0.15)",marginBottom:12,minHeight:480,display:"flex",flexDirection:"column",position:"relative",background:cardBg,cursor:"pointer"}}
         onClick={()=>setSelectedPlace({name:slot.name,category:slot.category})}>
 
         {/* Hero — photo or rich gradient */}
@@ -117,11 +129,7 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
             position:"relative",
             height:240,
             flexShrink:0,
-            background: isCompleted ? "#e8e8e8" :
-              slot.highlight ? `linear-gradient(145deg,${T.ink} 0%,#2d1f10 100%)` :
-              bucket === "morning" ? "linear-gradient(145deg,#1a0e00 0%,#4a2c00 40%,#7a4a10 100%)" :
-              bucket === "afternoon" ? "linear-gradient(145deg,#0a1f14 0%,#1a4028 40%,#2d6040 100%)" :
-              "linear-gradient(145deg,#0d0514 0%,#2d0a28 40%,#4a0f3a 100%)",
+            background: isCompleted ? "#e8e8e8" : cardBg,
             overflow:"hidden",
           }}>
             {/* Decorative ambient glow */}
@@ -166,7 +174,7 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
         )}
 
         {/* Content area */}
-        <div style={{padding:"20px 20px 16px",flex:1,display:"flex",flexDirection:"column",gap:12,background:isCompleted?"#f8f8f8":isActive?T.sage:slot.highlight?T.ink:T.white}}>
+        <div style={{padding:"20px 20px 16px",flex:1,display:"flex",flexDirection:"column",gap:12,background:isCompleted?"#f8f8f8":"transparent"}}>
           {/* Activity */}
           <div style={{fontSize:15,color:slot.highlight||isActive?"rgba(255,255,255,0.85)":T.inkLight,lineHeight:1.65,fontStyle:"italic"}}>{slot.activity}</div>
 
@@ -273,9 +281,16 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
                   style={{flex:1,padding:"13px 0",borderRadius:14,background:slot.highlight?T.gold:T.sage,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:"pointer"}}>
                   I'm here →
                 </button>
+                <a
+                  href={`https://maps.apple.com/?q=${encodeURIComponent(slot.name)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  onClick={e=>e.stopPropagation()}
+                  style={{padding:"13px 12px",borderRadius:14,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.15)",color:slot.highlight||isActive?"white":T.inkFaint,fontSize:13,cursor:"pointer",textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",whiteSpace:"nowrap"}}>
+                  🗺
+                </a>
                 <button onClick={(e)=>{e.stopPropagation();setSelectedPlace({name:slot.name,category:slot.category});}}
-                  style={{padding:"13px 16px",borderRadius:14,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.15)",color:slot.highlight||isActive?"white":T.inkFaint,fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
-                  Reviews & hours
+                  style={{padding:"13px 12px",borderRadius:14,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.15)",color:slot.highlight||isActive?"white":T.inkFaint,fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
+                  ★ Info
                 </button>
               </>
             )}
@@ -283,7 +298,16 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
         </div>
       </div>
 
-      {/* Time edit modal */}
+      {/* Swipe hint — shown once */}
+      {showSwipeHint && (
+        <div onClick={()=>{ setShowSwipeHint(false); localStorage.setItem("wandr-seen-swipe","1"); }}
+          style={{position:"absolute",inset:0,background:"rgba(28,22,18,0.55)",zIndex:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",borderRadius:24,cursor:"pointer",backdropFilter:"blur(2px)"}}>
+          <div style={{fontSize:36,marginBottom:12,animation:"pulse 1.5s ease infinite"}}>👈 👉</div>
+          <div style={{fontSize:15,fontWeight:700,color:"white",marginBottom:6}}>Swipe to explore stops</div>
+          <div style={{fontSize:12,color:"rgba(255,255,255,0.6)"}}>Tap to dismiss</div>
+        </div>
+      )}
+
       {editingTime && (
         <div style={{position:"fixed",inset:0,background:"rgba(28,22,18,0.7)",zIndex:400,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn 0.2s ease"}} onClick={()=>setEditingTime(false)}>
           <div onClick={e=>e.stopPropagation()} style={{background:T.white,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:480,padding:"24px 20px 40px",fontFamily:"'DM Sans',sans-serif",animation:"slideUp 0.3s ease"}}>
