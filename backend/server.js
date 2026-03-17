@@ -98,8 +98,12 @@ const checkHoursConflict = (timeStr, periods) => {
 
 // Single day endpoint — fast, called once per day
 app.post("/itinerary/day", async (req, res) => {
-  const { city, dates, dayNum, dayVibe, totalDays, travelProfile } = req.body;
+  const { city, dates, dayNum, dayVibe, totalDays, travelProfile, usedPlaces = [] } = req.body;
   if (!city || !dayNum) return res.status(400).json({ error: "city and dayNum required" });
+
+  const usedPlacesContext = usedPlaces.length > 0
+    ? `\nALREADY USED IN THIS TRIP (DO NOT REPEAT ANY OF THESE):\n${usedPlaces.map(p => `- ${p}`).join("\n")}\nEvery single place you recommend must be different from the above list. This is non-negotiable.\n`
+    : "";
 
   // Build travel DNA context from quiz answers
   const buildProfileContext = (p) => {
@@ -138,6 +142,7 @@ app.post("/itinerary/day", async (req, res) => {
 Plan Day ${dayNum} of ${totalDays} in ${city}.
 Trip dates: ${dates}
 Today's vibes: ${dayVibe || "open / flexible"}${profileContext}
+${usedPlacesContext}
 
 VIBE GUIDE:
 - Slow Morning: Start after 10am. First stop must be a neighborhood coffee shop, not a chain. Ease into the day.
@@ -465,51 +470,65 @@ OR
 
 // Chat edit endpoint — AI makes live edits to a day
 app.post("/chat-edit", async (req, res) => {
-  const { city, message, currentDay, profile, history = [] } = req.body;
+  const { city, dates, message, currentDay, allDays = [], dayDate, profile, history = [] } = req.body;
   if (!message || !currentDay) return res.status(400).json({ error: "message and currentDay required" });
 
   const profileContext = profile ? (() => {
     const lines = [];
     if (profile.pace === "slow") lines.push("prefers slow pace");
     if (profile.pace === "fast") lines.push("likes packing a lot in");
-    if (profile.food === "everything") lines.push("food-focused");
-    if (profile.food === "local") lines.push("prefers local restaurants");
+    if (profile.food === "local") lines.push("prefers local spots");
     if (profile.vibe === "immerse") lines.push("avoids tourist traps");
-    if (profile.vibe === "relax") lines.push("prefers relaxed pace");
-    return lines.length ? `(Traveller: ${lines.join(", ")})` : "";
+    if (profile.vibe === "relax") lines.push("relaxed pace");
+    return lines.length ? `Traveller: ${lines.join(", ")}.` : "";
   })() : "";
 
-  // Build conversation context from history
-  const historyContext = history.length > 0
-    ? "\n\nPrevious edits this session:\n" + history.map(m => `${m.role === "user" ? "User" : "AI"}: ${m.text}`).join("\n")
+  const usedInOtherDays = allDays
+    .filter(d => d.day !== currentDay.day)
+    .flatMap(d => d.slots?.map(s => s.name) || []);
+
+  const otherDaysContext = allDays.length > 1
+    ? `\nOTHER DAYS IN THIS TRIP:\n${allDays.filter(d => d.day !== currentDay.day).map(d =>
+        `Day ${d.day}: ${d.slots?.map(s => s.name).join(", ")}`
+      ).join("\n")}\n`
     : "";
 
-  const jsonPrompt = `You are a travel itinerary editor. You have been given a complete itinerary and must edit it based on the user's request. Never ask for more information — just make the edit.
+  const usedPlacesNote = usedInOtherDays.length > 0
+    ? `\nDO NOT USE these places (already on other days): ${usedInOtherDays.join(", ")}`
+    : "";
 
-CITY: ${city}
-DAY: ${currentDay.day}
+  const historyContext = history.length > 0
+    ? "\nPrevious edits:\n" + history.map(m => `${m.role === "user" ? "User" : "AI"}: ${m.text}`).join("\n")
+    : "";
+
+  const jsonPrompt = `You are the AI travel editor for Wandr. Edit this itinerary directly — never ask for more information.
+
+TRIP: ${city}${dates ? ` · ${dates}` : ""}
+${otherDaysContext}
+EDITING: Day ${currentDay.day}${dayDate ? ` (${dayDate})` : ""}
 THEME: ${currentDay.theme}
-
-CURRENT ITINERARY (${currentDay.slots?.length || 0} slots):
+CURRENT SLOTS (${currentDay.slots?.length || 0} stops):
 ${JSON.stringify(currentDay.slots, null, 2)}
-
-USER REQUEST: "${message}" ${profileContext}
+${usedPlacesNote}
+${profileContext}
 ${historyContext}
 
+USER REQUEST: "${message}"
+
 RULES:
-- You HAVE the itinerary above — edit it directly
-- Keep all existing slots unless asked to remove or replace them
-- Add real named places in ${city} when adding new stops
-- Maintain chronological time order with no overlaps
-- Use this exact JSON schema for each slot: {time, end_time, name, category, neighborhood, activity, transit_from_prev, price, must_know, is_meal, highlight}
-- is_meal: true only for breakfast/lunch/dinner/brunch
+- Edit directly — never ask for more info
+- Use only REAL places in ${city}
+- Do NOT repeat places from other days
+- Maintain chronological time flow, no overlaps
+- Keep existing slots unless asked to change them
+- Slot schema: {time, end_time, name, category, neighborhood, activity, transit_from_prev, price, must_know, is_meal, highlight}
 
-Return ONLY this JSON, no explanation, no markdown:
-{"day":${currentDay.day},"theme":"${currentDay.theme}","slots":[...complete updated slots array...]}`;
+Return ONLY this JSON — no explanation, no markdown:
+{"day":${currentDay.day},"theme":"${currentDay.theme}","slots":[...complete updated slots...]}`;
 
-  const msgPrompt = `Complete this sentence in 10 words or less, be specific and cheerful: "Done! I've ___" based on this request for a ${city} itinerary: "${message}". Example outputs: "Done! I've added New York Bar on Day 1 after dinner." Just the sentence, no extra text.`;
+  const msgPrompt = `In under 12 words confirm what changed: "Done! ___" for this ${city} request: "${message}". Be specific. Example: "Done! Added New York Bar rooftop after dinner."`;
+
   try {
-    // 25s timeout
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000));
     const [jsonText, msgText] = await Promise.race([
       Promise.all([

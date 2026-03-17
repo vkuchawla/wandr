@@ -18,7 +18,12 @@ const getDayDate = (dates, dayIdx) => {
 };
 
 function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, preloadedDays, supabase, user }) {
-  const [daysData, setDaysData]   = useState(preloadedDays || []);
+  // Deduplicate days — keep only first occurrence of each day number
+  const dedupeDays = (days) => {
+    const seen = new Set();
+    return (days || []).filter(d => { if (seen.has(d.day)) return false; seen.add(d.day); return true; });
+  };
+  const [daysData, setDaysData] = useState(dedupeDays(preloadedDays));
   const [status, setStatus]       = useState(preloadedDays?.length > 0 ? "done" : "loading");
   const [statusMsg, setStatusMsg] = useState("");
   const [activeDay, setActiveDay] = useState(0);
@@ -49,35 +54,37 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
     setStatus("loading"); setDaysData([]); setActiveDay(0); savedRef.current=false;
     setStatusMsg(`Building your ${totalDays}-day trip…`);
 
-    // Generate all days in parallel — much faster than sequential
-    const dayPromises = Array.from({ length: totalDays }, (_, i) => {
+    // Generate days sequentially so each day knows what previous days used
+    const allDays = [];
+    for (let i = 0; i < totalDays; i++) {
       const d = i + 1;
-      return fetch(`${BACKEND}/itinerary/day`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ city, dates, dayNum: d, dayVibe: dayVibes[d-1] || "open / flexible", totalDays, travelProfile: profile?.answers || null })
-      })
-        .then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e.error || "Error")))
-        .then(dayData => {
-          // Add each day as it completes so UI updates progressively
-          setDaysData(prev => {
-            const next = [...prev];
-            next[i] = dayData;
-            const filled = next.filter(Boolean);
-            if (filled.length === 1) { setStatus("partial"); setActiveDay(0); }
-            setLoadingDay(filled.length + 1);
-            return next;
-          });
-          return dayData;
-        })
-        .catch(e => { console.error(`Day ${d} error:`, e); return null; });
-    });
+      const usedPlaces = allDays.flatMap(day => day?.slots?.map(s => s.name) || []);
+      try {
+        const dayData = await fetch(`${BACKEND}/itinerary/day`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            city, dates,
+            dayNum: d,
+            dayVibe: dayVibes[d-1] || "open / flexible",
+            totalDays,
+            travelProfile: profile?.answers || null,
+            usedPlaces // pass places already used in previous days
+          })
+        }).then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e.error || "Error")));
 
-    await Promise.all(dayPromises);
-    setDaysData(prev => prev.filter(Boolean));
+        allDays[i] = dayData;
+        setDaysData([...allDays].filter(Boolean));
+        setLoadingDay(i + 2);
+        if (i === 0) { setStatus("partial"); setActiveDay(0); }
+      } catch(e) {
+        console.error(`Day ${d} error:`, e);
+        allDays[i] = null;
+      }
+    }
+
+    setDaysData(allDays.filter(Boolean));
     setStatus("done");
-
-    // Enrich slots with photos/hours in background after itinerary is shown
     setTimeout(() => enrichSlots(), 500);
   };
 
@@ -131,7 +138,7 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
     try {
       const dayDate = getDayDate(dates, activeDay);
 
-      // Call backend chat-edit with retry for Render cold starts
+      // Call backend chat-edit with full trip context
       let res;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
@@ -140,8 +147,10 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               city,
+              dates,
               message: msg,
               currentDay: day,
+              allDays: daysData, // full trip context
               dayDate,
               profile: profile?.answers || null,
               history: chatMessages.slice(-6)
@@ -456,7 +465,7 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
                 <div style={{width:34,height:34,borderRadius:"50%",background:`linear-gradient(135deg,${T.accent},#9b2020)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>✦</div>
                 <div>
                   <div style={{fontSize:14,fontWeight:700,color:T.ink}}>
-                    Editing Day {daysData[activeDay]?.day}
+                    {daysData.length > 1 ? `Editing Day ${daysData[activeDay]?.day}` : "Edit your itinerary"}
                     {getDayDate(dates, activeDay) && <span style={{fontWeight:400,color:T.inkLight}}> · {getDayDate(dates, activeDay)}</span>}
                   </div>
                   <div style={{fontSize:11,color:T.inkFaint}}>{city?.split(",")[0]} · Add, remove, or swap anything</div>
@@ -473,15 +482,22 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
               </div>
             </div>
 
-            {/* Day selector */}
+            {/* Day dropdown */}
             {daysData.length > 1 && (
-              <div style={{padding:"8px 16px",borderBottom:`1px solid ${T.dust}`,display:"flex",gap:6}}>
-                {daysData.map((d,i)=>(
-                  <button key={i} onClick={()=>setActiveDay(i)}
-                    style={{padding:"4px 12px",borderRadius:12,background:activeDay===i?T.ink:T.paper,border:`1px solid ${activeDay===i?"transparent":T.dust}`,color:activeDay===i?T.white:T.inkLight,fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                    Day {i+1}
-                  </button>
-                ))}
+              <div style={{padding:"8px 16px",borderBottom:`1px solid ${T.dust}`}}>
+                <select
+                  value={activeDay}
+                  onChange={e => { setActiveDay(Number(e.target.value)); setChatMessages([]); }}
+                  style={{width:"100%",padding:"8px 12px",borderRadius:12,border:`1.5px solid ${T.dust}`,background:T.cream,color:T.ink,fontSize:13,fontWeight:600,outline:"none",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                  {daysData.map((d,i) => {
+                    const date = getDayDate(dates, i);
+                    return (
+                      <option key={i} value={i}>
+                        Day {d.day}{date ? ` · ${date}` : ""}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
             )}
 
