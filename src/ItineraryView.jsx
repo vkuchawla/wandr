@@ -4,6 +4,19 @@ import { MomentCards } from "./MomentCards.jsx";
 import { PlaceSheet } from "./PlaceSheet.jsx";
 import { ShareCard } from "./ShareCard.jsx";
 import { parseTripDays, countDays } from "./utils.jsx";
+// Parse trip start date and compute date for each day
+const getDayDate = (dates, dayIdx) => {
+  if (!dates) return null;
+  const match = dates.match(/([A-Za-z]+\s+\d+)/);
+  if (!match) return null;
+  try {
+    const year = dates.match(/\d{4}/)?.[0] || new Date().getFullYear();
+    const base = new Date(`${match[1]}, ${year}`);
+    base.setDate(base.getDate() + dayIdx);
+    return base.toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" });
+  } catch { return null; }
+};
+
 function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, preloadedDays, supabase, user }) {
   const [daysData, setDaysData]   = useState(preloadedDays || []);
   const [status, setStatus]       = useState(preloadedDays?.length > 0 ? "done" : "loading");
@@ -95,6 +108,14 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
 
   useEffect(()=>{ if (!preloadedDays?.length) generate(); }, []);
 
+  // Keep Render backend warm — ping every 14 minutes to prevent cold starts
+  useEffect(() => {
+    const ping = () => fetch(`${BACKEND}/health`).catch(()=>{});
+    ping(); // immediate ping on mount
+    const interval = setInterval(ping, 14 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const sendChat = async (msg) => {
     if (!msg.trim() || chatLoading) return;
     const day = daysData[activeDay];
@@ -108,6 +129,9 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
     setUndoStack(prev => [...prev.slice(-4), { dayIdx: activeDay, day: JSON.parse(JSON.stringify(day)) }]);
 
     try {
+      const dayDate = getDayDate(dates, activeDay);
+
+      // Call backend chat-edit with retry for Render cold starts
       let res;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
@@ -118,23 +142,24 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
               city,
               message: msg,
               currentDay: day,
+              dayDate,
               profile: profile?.answers || null,
               history: chatMessages.slice(-6)
             })
           });
-          break; // success
+          break;
         } catch(fetchErr) {
           if (attempt === 0) {
-            await new Promise(r => setTimeout(r, 3000)); // wait 3s and retry
+            await new Promise(r => setTimeout(r, 4000));
           } else throw fetchErr;
         }
       }
       const data = await res.json();
       if (data.updatedDay) {
         setDaysData(prev => prev.map((d, i) => i === activeDay ? data.updatedDay : d));
-        setChatMessages(prev => [...prev, { role:"assistant", text: data.message || "Done! Updated your itinerary.", success: true }]);
+        setChatMessages(prev => [...prev, { role:"assistant", text: data.message || `Done! Updated Day ${day.day}${dayDate ? ` (${dayDate})` : ""}.`, success: true }]);
       } else {
-        setChatMessages(prev => [...prev, { role:"assistant", text: data.message || "I couldn\'t make that change. Try rephrasing." }]);
+        setChatMessages(prev => [...prev, { role:"assistant", text: data.message || "Couldn\'t make that change. Try rephrasing." }]);
       }
     } catch(e) {
       setChatError("Connection issue — try again");
@@ -430,8 +455,11 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 <div style={{width:34,height:34,borderRadius:"50%",background:`linear-gradient(135deg,${T.accent},#9b2020)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>✦</div>
                 <div>
-                  <div style={{fontSize:14,fontWeight:700,color:T.ink}}>Edit Day {daysData[activeDay]?.day}</div>
-                  <div style={{fontSize:11,color:T.inkFaint}}>Add, remove, or swap anything</div>
+                  <div style={{fontSize:14,fontWeight:700,color:T.ink}}>
+                    Editing Day {daysData[activeDay]?.day}
+                    {getDayDate(dates, activeDay) && <span style={{fontWeight:400,color:T.inkLight}}> · {getDayDate(dates, activeDay)}</span>}
+                  </div>
+                  <div style={{fontSize:11,color:T.inkFaint}}>{city?.split(",")[0]} · Add, remove, or swap anything</div>
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -492,7 +520,9 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
                 <div style={{display:"flex",justifyContent:"flex-start",marginBottom:10,alignItems:"flex-end",gap:8}}>
                   <div style={{width:24,height:24,borderRadius:"50%",background:`linear-gradient(135deg,${T.accent},#9b2020)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10}}>✦</div>
                   <div style={{padding:"10px 14px",borderRadius:"18px 18px 18px 4px",background:T.paper,fontSize:13}}>
-                    <span style={{animation:"pulse 1s ease infinite",color:T.inkFaint}}>Updating Day {daysData[activeDay]?.day}…</span>
+                    <span style={{animation:"pulse 1s ease infinite",color:T.inkFaint}}>
+                      Updating Day {daysData[activeDay]?.day}{getDayDate(dates, activeDay) ? ` · ${getDayDate(dates, activeDay)}` : ""}…
+                    </span>
                   </div>
                 </div>
               )}
@@ -515,14 +545,6 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
         </div>
       )}
 
-      {/* Floating chat button */}
-      {status==="done" && !showChat && (
-        <button onClick={()=>setShowChat(true)}
-          style={{position:"fixed",bottom:NAV_H+16,right:16,borderRadius:28,background:`linear-gradient(135deg,${T.accent},#9b2020)`,border:"none",boxShadow:"0 4px 20px rgba(200,75,47,0.35)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px 18px",zIndex:50,animation:"fadeUp 0.3s ease"}}>
-          <span style={{fontSize:14,color:"white"}}>✦</span>
-          <span style={{fontSize:13,fontWeight:700,color:"white"}}>Edit with AI</span>
-        </button>
-      )}
 
       {/* Header */}
       <div style={{background:`linear-gradient(160deg,${T.ink} 0%,#2d1f10 100%)`,padding:"48px 20px 20px"}}>
@@ -618,12 +640,20 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
         />
       )}
 
+      {/* Edit with AI — at bottom of content, above nav */}
+      {status==="done" && !showChat && (
+        <div style={{padding:"8px 20px 24px"}}>
+          <button onClick={()=>setShowChat(true)}
+            style={{width:"100%",padding:"14px 0",borderRadius:16,background:`linear-gradient(135deg,${T.accent},#9b2020)`,border:"none",boxShadow:"0 4px 20px rgba(200,75,47,0.3)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontFamily:"'DM Sans',sans-serif"}}>
+            <span style={{fontSize:14,color:"white"}}>✦</span>
+            <span style={{fontSize:14,fontWeight:700,color:"white"}}>Edit with AI</span>
+          </button>
+        </div>
+      )}
+
     </div>
   );
 }
-
-// ─────────────────────────────────────────────
-// PLAN MODE — draggable list view
 // ─────────────────────────────────────────────
 function PlanMode({ day, activeDay, ratings, BUCKET_COLORS, getBucket, TRANSIT_ICONS, TRANSIT_COLORS, setSelectedPlace, onUpdateSlots }) {
   const slots = day?.slots || [];
