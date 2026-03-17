@@ -108,17 +108,27 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
     setUndoStack(prev => [...prev.slice(-4), { dayIdx: activeDay, day: JSON.parse(JSON.stringify(day)) }]);
 
     try {
-      const res = await fetch(`${BACKEND}/chat-edit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          city,
-          message: msg,
-          currentDay: day,
-          profile: profile?.answers || null,
-          history: chatMessages.slice(-6) // send last 6 messages for context
-        })
-      });
+      let res;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          res = await fetch(`${BACKEND}/chat-edit`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              city,
+              message: msg,
+              currentDay: day,
+              profile: profile?.answers || null,
+              history: chatMessages.slice(-6)
+            })
+          });
+          break; // success
+        } catch(fetchErr) {
+          if (attempt === 0) {
+            await new Promise(r => setTimeout(r, 3000)); // wait 3s and retry
+          } else throw fetchErr;
+        }
+      }
       const data = await res.json();
       if (data.updatedDay) {
         setDaysData(prev => prev.map((d, i) => i === activeDay ? data.updatedDay : d));
