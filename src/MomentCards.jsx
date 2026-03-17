@@ -26,7 +26,7 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
     setTimeValidating(true);
     setTimeMsg(null);
     try {
-      const res = await fetch("http://localhost:3001/validate-time", {
+      const res = await fetch("https://wandr-62i6.onrender.com/validate-time", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
