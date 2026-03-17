@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { DAYS, GLOBAL_CSS, NAV_H, T, VIBE_COLORS_MAP } from "./constants.jsx";
-function SavedTripsScreen({ savedTrips, onOpenTrip, onPlanNew }) {
+function SavedTripsScreen({ savedTrips, onOpenTrip, onPlanNew, onDeleteTrip }) {
   const VIBE_C = VIBE_COLORS_MAP;
+  const [confirmDelete, setConfirmDelete] = useState(null); // trip to confirm delete
 
   const getVibes = (moodCtx) => {
     if (!moodCtx) return [];
@@ -49,13 +51,19 @@ function SavedTripsScreen({ savedTrips, onOpenTrip, onPlanNew }) {
               <div style={{background:`linear-gradient(135deg,${T.ink},#2d1f10)`,padding:"20px 20px 16px",position:"relative",overflow:"hidden"}}>
                 <div style={{position:"absolute",top:-10,right:-10,fontSize:80,opacity:0.05}}>✦</div>
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
-                  <div>
+                  <div style={{flex:1,minWidth:0}}>
                     <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:T.white,lineHeight:1.2}}>{trip.city}</div>
                     <div style={{fontSize:12,color:"rgba(255,255,255,0.4)",marginTop:4}}>{trip.dates || "No dates set"}</div>
                   </div>
-                  <div style={{background:"rgba(255,255,255,0.08)",borderRadius:12,padding:"6px 12px",textAlign:"center"}}>
-                    <div style={{fontSize:18,fontWeight:800,color:T.white,lineHeight:1}}>{days.length}</div>
-                    <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",fontWeight:700,letterSpacing:"0.06em"}}>DAYS</div>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{background:"rgba(255,255,255,0.08)",borderRadius:12,padding:"6px 12px",textAlign:"center"}}>
+                      <div style={{fontSize:18,fontWeight:800,color:T.white,lineHeight:1}}>{days.length}</div>
+                      <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",fontWeight:700,letterSpacing:"0.06em"}}>DAYS</div>
+                    </div>
+                    <button onClick={(e)=>{ e.stopPropagation(); setConfirmDelete(trip); }}
+                      style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:10,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:16,flexShrink:0}}>
+                      ⋯
+                    </button>
                   </div>
                 </div>
 
@@ -102,6 +110,30 @@ function SavedTripsScreen({ savedTrips, onOpenTrip, onPlanNew }) {
           );
         })}
       </div>
+
+      {/* Delete confirmation modal */}
+      {confirmDelete && (
+        <div style={{position:"fixed",inset:0,background:"rgba(28,22,18,0.7)",zIndex:400,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:"'DM Sans',sans-serif"}}
+          onClick={()=>setConfirmDelete(null)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:T.white,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:480,padding:"24px 20px 40px"}}>
+            <div style={{width:40,height:4,borderRadius:2,background:T.dust,margin:"0 auto 20px"}}/>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:T.ink,marginBottom:6}}>Delete this trip?</div>
+            <div style={{fontSize:14,color:T.inkLight,marginBottom:24}}>
+              <strong>{confirmDelete.city}</strong>{confirmDelete.dates ? ` · ${confirmDelete.dates}` : ""} will be permanently removed.
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setConfirmDelete(null)}
+                style={{flex:1,padding:"13px 0",borderRadius:14,background:T.paper,border:`1px solid ${T.dust}`,color:T.inkLight,fontSize:14,fontWeight:600,cursor:"pointer"}}>
+                Cancel
+              </button>
+              <button onClick={()=>{ onDeleteTrip(confirmDelete); setConfirmDelete(null); }}
+                style={{flex:1,padding:"13px 0",borderRadius:14,background:"#c84b2f",border:"none",color:"white",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                Delete trip
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

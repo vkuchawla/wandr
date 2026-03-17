@@ -44,17 +44,29 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user }
   });
   const pastTrips = savedTrips.filter(t => !upcomingTrips.includes(t));
 
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+
   const handleCityChange = (val) => {
     setCity(val);
     clearTimeout(autocompleteTimer.current);
-    if (val.length < 2) { setSuggestions([]); setShowSuggestions(false); return; }
+    if (val.length < 2) { setSuggestions([]); setShowSuggestions(false); setSuggestionsLoading(false); return; }
+    setSuggestionsLoading(true);
     autocompleteTimer.current = setTimeout(async () => {
       try {
         const res = await fetch(`${BACKEND}/autocomplete?q=${encodeURIComponent(val)}`);
         const data = await res.json();
         setSuggestions(data.suggestions || []);
         setShowSuggestions(true);
-      } catch(e) { setSuggestions([]); }
+      } catch(e) {
+        // Retry once after 2s (Render cold start)
+        try {
+          await new Promise(r => setTimeout(r, 2000));
+          const res = await fetch(`${BACKEND}/autocomplete?q=${encodeURIComponent(val)}`);
+          const data = await res.json();
+          setSuggestions(data.suggestions || []);
+          setShowSuggestions(true);
+        } catch { setSuggestions([]); }
+      } finally { setSuggestionsLoading(false); }
     }, 300);
   };
 
@@ -142,8 +154,11 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user }
               onFocus={()=>suggestions.length>0&&setShowSuggestions(true)}
               placeholder="City or destination…"
               style={{width:"100%",padding:"12px 16px",borderRadius:14,border:`1.5px solid ${city?T.accent:T.dust}`,background:T.cream,color:T.ink,fontSize:14,fontWeight:600,outline:"none",transition:"border-color 0.2s"}}/>
-            {showSuggestions && suggestions.length > 0 && (
+            {(showSuggestions && suggestions.length > 0) || suggestionsLoading ? (
               <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,right:0,background:T.white,borderRadius:14,boxShadow:"0 8px 24px rgba(28,22,18,0.12)",border:`1px solid ${T.dust}`,zIndex:50,overflow:"hidden"}}>
+                {suggestionsLoading && suggestions.length === 0 && (
+                  <div style={{padding:"12px 16px",fontSize:13,color:T.inkFaint}}>Searching…</div>
+                )}
                 {suggestions.map((s,i)=>(
                   <button key={i} onMouseDown={()=>selectSuggestion(s)}
                     style={{width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:10,borderBottom:i<suggestions.length-1?`1px solid ${T.dust}`:"none"}}
@@ -157,7 +172,7 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user }
                   </button>
                 ))}
               </div>
-            )}
+            ) : null}
           </div>
           <button onClick={()=>city.trim()&&onStart(city.trim(),"")}
             style={{flexShrink:0,padding:"12px 18px",borderRadius:14,background:city.trim()?T.ink:T.dust,border:"none",color:"white",fontSize:14,fontWeight:800,cursor:city.trim()?"pointer":"default",transition:"background 0.2s"}}>

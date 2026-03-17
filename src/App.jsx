@@ -1,4 +1,11 @@
 import { useState, useEffect } from "react";
+
+const BACKEND = "https://wandr-62i6.onrender.com";
+
+// Keep Render backend warm — ping on load and every 14 minutes
+const pingBackend = () => fetch(`${BACKEND}/health`).catch(()=>{});
+pingBackend();
+setInterval(pingBackend, 14 * 60 * 1000);
 import { createClient } from "@supabase/supabase-js";
 import { T, GLOBAL_CSS, NAV_H } from "./constants.jsx";
 import { NavBar } from "./NavBar.jsx";
@@ -158,7 +165,7 @@ export default function App() {
       <div style={{width:"100%",maxWidth:480,minHeight:"100vh",background:T.cream,position:"relative",boxShadow:"0 0 80px rgba(28,22,18,0.15)"}}>
         {screen==="auth"        && <AuthScreen supabase={supabase} onSkip={()=>setScreen("onboarding")}/>}
         {screen==="onboarding"  && <ProfileScreen profile={null} onSaveProfile={handleSaveProfile} isOnboarding={true} supabase={supabase}/>}
-        {screen==="home"        && <HomeScreen onStart={handleStart} savedTrips={savedTrips} profile={profile} onOpenTrip={handleOpenTrip} supabase={supabase}/>}
+        {screen==="home"        && <HomeScreen onStart={handleStart} savedTrips={savedTrips} profile={profile} onOpenTrip={handleOpenTrip} supabase={supabase} user={user}/>}
         {screen==="profile"     && !user && <SignInPrompt supabase={supabase}/>}
         {screen==="profile"     && user  && <ProfileScreen profile={profile} onSaveProfile={handleSaveProfile} supabase={supabase} savedTrips={savedTrips} onOpenTrip={handleOpenTrip}/>}
         {screen==="explore"     && <ExploreScreen onSelectCity={(c)=>{setCity(c);setScreen("city");}} supabase={supabase}/>}
@@ -166,7 +173,17 @@ export default function App() {
         {screen==="city" && <CityPage city={city} dates={dates} supabase={supabase} user={user} onPlan={()=>setScreen("mood")} onRemix={(trip)=>{ setMoodContext(trip.mood_context||""); setScreen("mood"); }} onBack={()=>setScreen("home")}/>}
         {screen==="mood"        && <MoodBoard city={city} dates={dates} onBuild={handleBuild} onBack={()=>setScreen("city")} profile={profile} remixContext={moodContext}/>}
         {screen==="itinerary"   && <ItineraryView city={city} dates={dates} moodContext={moodContext} profile={profile} onBack={()=>setScreen("mood")} onSave={handleSaveTrip} supabase={supabase} user={user}/>}
-        {screen==="saved"       && <SavedTripsScreen savedTrips={savedTrips} onOpenTrip={handleOpenTrip} onPlanNew={()=>setScreen("home")}/>}
+        {screen==="saved"       && <SavedTripsScreen savedTrips={savedTrips} onOpenTrip={handleOpenTrip} onPlanNew={()=>setScreen("home")} onDeleteTrip={async (trip) => {
+          // Remove from state
+          setSavedTrips(prev => prev.filter(t => !(t.city === trip.city && t.dates === trip.dates)));
+          // Remove from localStorage
+          const local = JSON.parse(localStorage.getItem("wandr-trips") || "[]");
+          localStorage.setItem("wandr-trips", JSON.stringify(local.filter(t => !(t.city === trip.city && t.dates === trip.dates))));
+          // Remove from Supabase
+          if (supabase && user) {
+            await supabase.from("trips").delete().eq("user_id", user.id).eq("city", trip.city);
+          }
+        }}/>}
         {screen==="trip-detail" && openTrip && (
           <ItineraryView city={openTrip.city} dates={openTrip.dates} moodContext={openTrip.moodContext||openTrip.mood_context||""} preloadedDays={openTrip.days||[]} onBack={()=>setScreen("saved")} onSave={()=>{}} supabase={supabase} user={user}/>
         )}

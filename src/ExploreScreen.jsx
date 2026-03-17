@@ -96,7 +96,15 @@ function ExploreScreen({ onSelectCity, supabase }) {
         const data = await res.json();
         setSuggestions(data.suggestions || []);
         setShowSuggestions(true);
-      } catch(e) { setSuggestions([]); }
+      } catch(e) {
+        try {
+          await new Promise(r => setTimeout(r, 2000));
+          const res = await fetch(`${BACKEND}/autocomplete?q=${encodeURIComponent(val)}`);
+          const data = await res.json();
+          setSuggestions(data.suggestions || []);
+          setShowSuggestions(true);
+        } catch { setSuggestions([]); }
+      }
     }, 300);
   };
 
