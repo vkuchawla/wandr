@@ -483,31 +483,39 @@ app.post("/chat-edit", async (req, res) => {
     ? "\n\nPrevious edits this session:\n" + history.map(m => `${m.role === "user" ? "User" : "AI"}: ${m.text}`).join("\n")
     : "";
 
-  const jsonPrompt = `Edit this ${city} itinerary for Day ${currentDay.day}.${historyContext}
+  const jsonPrompt = `You are a travel itinerary editor. You have been given a complete itinerary and must edit it based on the user's request. Never ask for more information — just make the edit.
 
-Current slots:
+CITY: ${city}
+DAY: ${currentDay.day}
+THEME: ${currentDay.theme}
+
+CURRENT ITINERARY (${currentDay.slots?.length || 0} slots):
 ${JSON.stringify(currentDay.slots, null, 2)}
 
-New request: "${message}" ${profileContext}
+USER REQUEST: "${message}" ${profileContext}
+${historyContext}
 
-Rules:
-- Keep existing slots unless asked to remove/replace
-- Add real named places in ${city} if requested
-- No time overlaps
-- Same JSON schema: {time, end_time, name, category, neighborhood, activity, transit_from_prev, price, must_know, is_meal, highlight}
-- is_meal true only for meals
-- Maintain logical time flow and opening hours
+RULES:
+- You HAVE the itinerary above — edit it directly
+- Keep all existing slots unless asked to remove or replace them
+- Add real named places in ${city} when adding new stops
+- Maintain chronological time order with no overlaps
+- Use this exact JSON schema for each slot: {time, end_time, name, category, neighborhood, activity, transit_from_prev, price, must_know, is_meal, highlight}
+- is_meal: true only for breakfast/lunch/dinner/brunch
 
-Return ONLY the complete updated JSON object, nothing else:
-{"day":${currentDay.day},"theme":"${currentDay.theme}","slots":[...]}`;
+Return ONLY this JSON, no explanation, no markdown:
+{"day":${currentDay.day},"theme":"${currentDay.theme}","slots":[...complete updated slots array...]}`;
 
-  const msgPrompt = `In one short friendly sentence, confirm what you changed in this ${city} itinerary based on: "${message}". Be specific. No JSON.`;
-
+  const msgPrompt = `Complete this sentence in 10 words or less, be specific and cheerful: "Done! I've ___" based on this request for a ${city} itinerary: "${message}". Example outputs: "Done! I've added New York Bar on Day 1 after dinner." Just the sentence, no extra text.`;
   try {
-    // Run both in parallel
-    const [jsonText, msgText] = await Promise.all([
-      callClaude(jsonPrompt, 2, 3000, "claude-sonnet-4-6"),
-      callClaude(msgPrompt, 1, 200, "claude-haiku-4-5-20251001")
+    // 25s timeout
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000));
+    const [jsonText, msgText] = await Promise.race([
+      Promise.all([
+        callClaude(jsonPrompt, 2, 2000, "claude-haiku-4-5-20251001"),
+        callClaude(msgPrompt, 1, 150, "claude-haiku-4-5-20251001")
+      ]),
+      timeout.then(() => { throw new Error("timeout"); })
     ]);
 
     const message_text = msgText?.trim() || "Done! I've updated your itinerary.";
