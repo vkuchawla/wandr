@@ -7,7 +7,7 @@ const app = express();
 const PORT = 3001;
 
 app.use(cors({ origin: "*", methods: ["GET","POST","OPTIONS"], allowedHeaders: ["Content-Type","Authorization"] }));
-app.options("*", cors()); // handle preflight for all routes
+app.use((req, res, next) => { res.header("Access-Control-Allow-Origin", "*"); next(); }); // extra safety for cold starts
 app.use(express.json());
 
 app.get("/health", (_, res) => res.json({ ok: true }));
