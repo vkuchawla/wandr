@@ -1,24 +1,5 @@
 import { useState, useEffect } from "react";
-import { GLOBAL_CSS, NAV_H, T, VIBE_COLORS_MAP } from "./constants.jsx";
-
-const CITY_PHOTOS = {
-  "New Orleans":"https://images.unsplash.com/photo-1571893544028-06b07af6dade?w=400&q=70",
-  "Tokyo":      "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400&q=70",
-  "Barcelona":  "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=400&q=70",
-  "Nashville":  "https://images.unsplash.com/photo-1545579133-99bb5ab189bd?w=400&q=70",
-  "Lisbon":     "https://images.unsplash.com/photo-1558370781-d6196949e317?w=400&q=70",
-  "Miami":      "https://images.unsplash.com/photo-1533106497176-45ae19e68ba2?w=400&q=70",
-  "Paris":      "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400&q=70",
-  "Mexico City":"https://images.unsplash.com/photo-1585464231875-d9ef1f5ad396?w=400&q=70",
-  "New York":   "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400&q=70",
-  "Kyoto":      "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400&q=70",
-  "Amsterdam":  "https://images.unsplash.com/photo-1512470876302-972faa2aa9a4?w=400&q=70",
-  "London":     "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=400&q=70",
-  "Seoul":      "https://images.unsplash.com/photo-1601621915196-2621bfb0cd6e?w=400&q=70",
-  "Istanbul":   "https://images.unsplash.com/photo-1541432901042-2d8bd64b4a9b?w=400&q=70",
-  "Bali":       "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400&q=70",
-  "Bangkok":    "https://images.unsplash.com/photo-1563492065599-3520f775eeed?w=400&q=70",
-};
+import { GLOBAL_CSS, NAV_H, T, VIBE_COLORS_MAP, CITY_PHOTOS } from "./constants.jsx";
 
 function parseVibesFromContext(moodCtx) {
   if (!moodCtx) return [];
@@ -42,6 +23,30 @@ function timeAgo(str) {
   return d.toLocaleDateString("en", { month:"short", day:"numeric" });
 }
 
+// Parse "Mar 18 – Mar 19, 2026" → { start, end } as Date objects
+function parseTripDates(dateStr) {
+  if (!dateStr) return { start: null, end: null };
+  const year = dateStr.match(/\d{4}/)?.[0] || new Date().getFullYear();
+  const parts = dateStr.split(/\s*[–—-]\s*/);
+  try {
+    const startRaw = parts[0].trim();
+    const endRaw   = (parts[1] || parts[0]).trim();
+    const start = new Date(`${startRaw}${startRaw.match(/\d{4}/) ? "" : `, ${year}`}`);
+    const end   = new Date(`${endRaw}${endRaw.match(/\d{4}/)   ? "" : `, ${year}`}`);
+    return { start: isNaN(start) ? null : start, end: isNaN(end) ? null : end };
+  } catch { return { start: null, end: null }; }
+}
+
+// Returns "active" | "upcoming" | "past" | "unknown"
+function getTripStatus(trip) {
+  const { start, end } = parseTripDates(trip.dates);
+  if (!start) return "unknown";
+  const now = new Date();
+  if (now < start) return "upcoming";
+  if (end && now > end) return "past";
+  return "active"; // currently traveling
+}
+
 function Avatar({ name, size = 36, color = T.accent }) {
   return (
     <div style={{width:size,height:size,borderRadius:"50%",background:color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.38,fontWeight:800,color:"white",flexShrink:0}}>
@@ -50,92 +55,137 @@ function Avatar({ name, size = 36, color = T.accent }) {
   );
 }
 
+const RATING_META = [
+  null,
+  { label:"Didn't enjoy it", color:"#999",     emoji:"😕" },
+  { label:"It was okay",     color:T.inkFaint,  emoji:"😐" },
+  { label:"Good spot",       color:"#5a8f5a",   emoji:"👍" },
+  { label:"Really liked it", color:"#b8860b",   emoji:"😊" },
+  { label:"Absolutely loved it", color:T.accent, emoji:"🤩" },
+];
+
+const PLACE_EMOJI = (name) => {
+  const n = (name || "").toLowerCase();
+  if (/coffee|café|cafe|espresso/.test(n)) return "☕";
+  if (/bar|cocktail|wine|beer|pub/.test(n)) return "🍸";
+  if (/restaurant|bistro|kitchen|grill|dining/.test(n)) return "🍽";
+  if (/museum|gallery|art/.test(n)) return "🏛";
+  if (/park|garden|nature/.test(n)) return "🌿";
+  if (/market/.test(n)) return "🛒";
+  if (/beach|coast/.test(n)) return "🏖";
+  if (/hotel|hostel/.test(n)) return "🏨";
+  return "📍";
+};
+
+// Beli-style rating card
 function RatingCard({ rating, onPlanCity }) {
   const stars = rating.stars || 0;
-  const labels = ["","Didn't enjoy it","It was okay","Good spot","Really liked it","Absolutely loved it"];
-  const [expanded, setExpanded] = useState(false);
+  const meta = RATING_META[stars];
+  const emoji = PLACE_EMOJI(rating.place_name);
 
   return (
-    <div style={{background:T.white,borderRadius:20,marginBottom:12,overflow:"hidden",boxShadow:"0 2px 12px rgba(28,22,18,0.07)",border:`1px solid ${T.dust}`,cursor:"pointer"}}
-      onClick={()=>setExpanded(e=>!e)}>
-
+    <div style={{background:T.white,borderRadius:18,marginBottom:10,overflow:"hidden",boxShadow:"0 2px 10px rgba(28,22,18,0.06)",border:`1px solid ${T.dust}`}}>
       {/* Author row */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px 0"}}>
-        <div style={{display:"flex",alignItems:"center",gap:9}}>
-          <Avatar name={rating.profiles?.name} size={32} color={T.sage}/>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px 10px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <Avatar name={rating.profiles?.name} size={30} color={T.sage}/>
           <div>
-            <div style={{fontSize:13,fontWeight:700,color:T.ink}}>{rating.profiles?.name || "Wanderer"}</div>
-            {rating.profiles?.travel_dna && <div style={{fontSize:10,color:T.inkFaint}}>{rating.profiles.travel_dna}</div>}
+            <span style={{fontSize:13,fontWeight:700,color:T.ink}}>{rating.profiles?.name || "Wanderer"}</span>
+            {rating.profiles?.travel_dna && (
+              <span style={{fontSize:11,color:T.inkFaint}}> · {rating.profiles.travel_dna}</span>
+            )}
           </div>
         </div>
-        <div style={{fontSize:11,color:T.inkFaint}}>{timeAgo(rating.rated_at)}</div>
+        <span style={{fontSize:11,color:T.inkFaint}}>{timeAgo(rating.rated_at)}</span>
       </div>
 
-      {/* Rating content */}
-      <div style={{padding:"12px 14px",display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+      {/* Main content */}
+      <div style={{padding:"0 14px 14px",display:"flex",gap:12,alignItems:"flex-start"}}>
+        {/* Place icon */}
+        <div style={{width:44,height:44,borderRadius:12,background:T.cream,border:`1px solid ${T.dust}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>
+          {emoji}
+        </div>
+
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:700,color:T.ink,marginBottom:2}}>{rating.place_name}</div>
-          <div style={{fontSize:12,color:T.inkFaint}}>📍 {rating.city}</div>
-        </div>
-        <div style={{flexShrink:0,textAlign:"right"}}>
-          <div style={{display:"flex",gap:2,justifyContent:"flex-end"}}>
-            {[1,2,3,4,5].map(s=>(
-              <span key={s} style={{fontSize:18,color:s<=stars?T.gold:T.dust}}>★</span>
-            ))}
+          {/* Place name */}
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,color:T.ink,lineHeight:1.2,marginBottom:2}}>
+            {rating.place_name}
           </div>
-          <div style={{fontSize:10,color:T.inkFaint,marginTop:2}}>{labels[stars]}</div>
+          {/* City */}
+          <div style={{fontSize:11,color:T.inkFaint,marginBottom:8}}>📍 {rating.city}</div>
+
+          {/* Stars + label inline */}
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:rating.note?8:0}}>
+            <div style={{display:"flex",gap:1}}>
+              {[1,2,3,4,5].map(s => (
+                <span key={s} style={{fontSize:13,color:s<=stars?T.gold:T.dust}}>★</span>
+              ))}
+            </div>
+            {meta && (
+              <span style={{fontSize:12,fontWeight:700,color:meta.color}}>{meta.emoji} {meta.label}</span>
+            )}
+          </div>
+
+          {/* Note */}
+          {rating.note && (
+            <div style={{fontSize:13,color:T.inkLight,fontStyle:"italic",lineHeight:1.5,background:T.cream,borderRadius:10,padding:"8px 10px",borderLeft:`3px solid ${T.gold}`}}>
+              "{rating.note}"
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Note */}
-      {rating.note && (
-        <div style={{margin:"0 14px",marginBottom:expanded?0:14,background:T.paper,borderRadius:12,padding:"10px 12px",fontSize:13,color:T.inkLight,fontStyle:"italic",lineHeight:1.5,borderLeft:`3px solid ${T.gold}`}}>
-          "{rating.note}"
-        </div>
-      )}
-
-      {/* Expanded CTA */}
-      {expanded && (
-        <div style={{padding:"12px 14px 14px",display:"flex",gap:8}} onClick={e=>e.stopPropagation()}>
-          <button onClick={()=>onPlanCity(rating.city)}
-            style={{flex:1,padding:"11px 0",borderRadius:14,background:T.ink,border:"none",color:T.white,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-            ✦ Plan a trip to {rating.city}
-          </button>
-        </div>
-      )}
+      {/* CTA */}
+      <div style={{borderTop:`1px solid ${T.dust}`,padding:"10px 14px"}}>
+        <button onClick={()=>onPlanCity(rating.city)}
+          style={{background:"none",border:"none",color:T.accent,fontSize:12,fontWeight:700,cursor:"pointer",padding:0,display:"flex",alignItems:"center",gap:4}}>
+          ✦ Plan a trip to {rating.city} →
+        </button>
+      </div>
     </div>
   );
 }
 
-function TripCard({ trip, user, following, followUser, onRemix }) {
+function FeedSection({ label, accent = T.inkFaint, children }) {
+  return (
+    <div style={{marginBottom:8}}>
+      <div style={{fontSize:11,fontWeight:800,letterSpacing:"0.12em",textTransform:"uppercase",color:accent,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function TripCard({ trip, user, following, followUser, onRemix, status }) {
   const vibes = parseVibesFromContext(trip.mood_context);
   const isFollowing = following.includes(trip.user_id);
   const isOwnTrip = user && trip.user_id === user.id;
-  const photo = CITY_PHOTOS[trip.city?.split(",")[0].trim()];
+  const cityKey = trip.city?.split(",")[0].trim();
+  const photo = CITY_PHOTOS[cityKey];
   const dayCount = Array.isArray(trip.days) ? trip.days.length : 0;
-  const topTheme = trip.days?.[0]?.theme;
+  const themes = (trip.days || []).slice(0, 3).map(d => d.theme).filter(Boolean);
 
   return (
-    <div style={{background:T.white,borderRadius:20,marginBottom:12,overflow:"hidden",boxShadow:"0 2px 12px rgba(28,22,18,0.07)",border:`1px solid ${T.dust}`}}>
-
+    <div style={{background:T.white,borderRadius:18,marginBottom:10,overflow:"hidden",boxShadow:"0 2px 10px rgba(28,22,18,0.06)",border:`1px solid ${T.dust}`}}>
       {/* Author row */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px 0"}}>
-        <div style={{display:"flex",alignItems:"center",gap:9}}>
-          <Avatar name={isOwnTrip ? (user?.email?.split("@")[0]) : trip.profiles?.name} size={32} color={isOwnTrip ? T.gold : T.accent}/>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <Avatar name={isOwnTrip ? (user?.email?.split("@")[0]) : trip.profiles?.name} size={30} color={isOwnTrip ? T.gold : T.accent}/>
           <div>
-            <div style={{fontSize:13,fontWeight:700,color:T.ink,lineHeight:1.2}}>
+            <span style={{fontSize:13,fontWeight:700,color:T.ink}}>
               {isOwnTrip ? "You" : (trip.profiles?.name || "Wanderer")}
-            </div>
+            </span>
             {trip.profiles?.travel_dna && (
-              <div style={{fontSize:10,color:T.inkFaint}}>{trip.profiles.travel_dna}</div>
+              <span style={{fontSize:11,color:T.inkFaint}}> · {trip.profiles.travel_dna}</span>
             )}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{fontSize:11,color:T.inkFaint}}>{timeAgo(trip.saved_at)}</div>
+          <span style={{fontSize:11,color:T.inkFaint}}>{timeAgo(trip.saved_at)}</span>
           {user && !isOwnTrip && (
             <button onClick={()=>followUser(trip.user_id)}
-              style={{padding:"5px 12px",borderRadius:20,background:isFollowing?T.paper:`linear-gradient(135deg,${T.accent},#9b2020)`,border:`1px solid ${isFollowing?T.dust:"transparent"}`,color:isFollowing?T.inkLight:T.white,fontSize:11,fontWeight:700,cursor:"pointer",transition:"all 0.15s",boxShadow:isFollowing?"none":"0 2px 8px rgba(200,75,47,0.2)"}}>
+              style={{padding:"4px 10px",borderRadius:20,background:isFollowing?T.paper:`linear-gradient(135deg,${T.accent},#9b2020)`,border:`1px solid ${isFollowing?T.dust:"transparent"}`,color:isFollowing?T.inkLight:T.white,fontSize:11,fontWeight:700,cursor:"pointer",transition:"all 0.15s"}}>
               {isFollowing ? "Following" : "+ Follow"}
             </button>
           )}
@@ -143,48 +193,51 @@ function TripCard({ trip, user, following, followUser, onRemix }) {
       </div>
 
       {/* City hero */}
-      <div style={{margin:"10px 14px",borderRadius:14,overflow:"hidden",position:"relative",height:140,background:`linear-gradient(135deg,${T.ink},#2d1f10)`}}>
-        {photo && <img src={photo} alt={trip.city} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}} onError={e=>e.target.style.display="none"}/>}
-        <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.05) 0%,rgba(0,0,0,0.6) 100%)"}}/>
-        <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"10px 14px"}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:"white",lineHeight:1.1}}>{trip.city?.split(",")[0]}</div>
-          <div style={{fontSize:11,color:"rgba(255,255,255,0.55)",marginTop:2}}>{dayCount} day{dayCount!==1?"s":""}{trip.dates ? ` · ${trip.dates}` : ""}</div>
+      <div style={{margin:"10px 14px",borderRadius:14,overflow:"hidden",position:"relative",height:130,background:`linear-gradient(135deg,${T.ink},#2d1f10)`}}>
+        {photo && <img src={photo} alt={cityKey} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.75}} onError={e=>e.target.style.display="none"}/>}
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0) 30%,rgba(0,0,0,0.65) 100%)"}}/>
+        <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"10px 12px"}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:"white",lineHeight:1}}>{cityKey}</div>
+          {dayCount > 0 && <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginTop:2}}>{dayCount} day{dayCount!==1?"s":""}</div>}
         </div>
-        {dayCount > 0 && (
-          <div style={{position:"absolute",top:10,right:10,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(6px)",borderRadius:10,padding:"3px 8px",fontSize:10,color:"white",fontWeight:700}}>
-            {dayCount}d trip
-          </div>
-        )}
+        <div style={{position:"absolute",top:8,right:8,background:status==="active"?"rgba(74,124,89,0.85)":"rgba(0,0,0,0.45)",backdropFilter:"blur(6px)",borderRadius:8,padding:"3px 8px",fontSize:10,color:"white",fontWeight:700,display:"flex",alignItems:"center",gap:4}}>
+          {status==="active" && <span style={{width:6,height:6,borderRadius:"50%",background:"#7cfc00",display:"inline-block",animation:"pulse 1.5s ease infinite"}}/>}
+          {status==="active" ? "Live now" : status==="upcoming" ? "Upcoming" : `${dayCount}d trip`}
+        </div>
       </div>
 
-      {/* Day theme preview */}
-      {topTheme && (
-        <div style={{padding:"0 14px 8px",fontSize:12,color:T.inkFaint,fontStyle:"italic",lineHeight:1.4}}>
-          "{topTheme}"
+      {/* Day themes */}
+      {themes.length > 0 && (
+        <div style={{padding:"0 14px 8px",display:"flex",flexDirection:"column",gap:3}}>
+          {themes.map((t, i) => (
+            <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:10,fontWeight:700,color:T.gold,minWidth:28}}>Day {i+1}</span>
+              <span style={{fontSize:12,color:T.inkLight,fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t}</span>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Vibe chips */}
+      {/* Vibes */}
       {vibes.length > 0 && (
-        <div style={{padding:"0 14px 10px",display:"flex",gap:6,flexWrap:"wrap"}}>
+        <div style={{padding:"0 14px 10px",display:"flex",gap:5,flexWrap:"wrap"}}>
           {vibes.map(v => {
             const key = v.toLowerCase().replace(/ /g,"-");
             const color = VIBE_COLORS_MAP[key] || T.inkFaint;
-            return <span key={v} style={{padding:"3px 9px",borderRadius:10,background:`${color}15`,fontSize:11,fontWeight:700,color}}>{v}</span>;
+            return <span key={v} style={{padding:"3px 8px",borderRadius:8,background:`${color}15`,fontSize:11,fontWeight:700,color}}>{v}</span>;
           })}
         </div>
       )}
 
       {/* Actions */}
-      <div style={{padding:"0 14px 14px",display:"flex",gap:8}}>
+      <div style={{borderTop:`1px solid ${T.dust}`,padding:"10px 14px"}}>
         {!isOwnTrip ? (
-          <button onClick={()=>onRemix(trip)} style={{flex:1,padding:"11px 0",borderRadius:14,background:`linear-gradient(135deg,${T.accent},#9b2020)`,border:"none",color:T.white,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,boxShadow:"0 4px 14px rgba(200,75,47,0.2)"}}>
-            <span>✦</span> Remix this trip
+          <button onClick={()=>onRemix(trip)}
+            style={{background:"none",border:"none",color:T.accent,fontSize:12,fontWeight:700,cursor:"pointer",padding:0,display:"flex",alignItems:"center",gap:4}}>
+            ✦ Remix this trip →
           </button>
         ) : (
-          <div style={{flex:1,padding:"11px 0",borderRadius:14,background:T.paper,fontSize:13,fontWeight:600,color:T.inkFaint,textAlign:"center",border:`1px solid ${T.dust}`}}>
-            Your trip ✦
-          </div>
+          <span style={{fontSize:12,color:T.inkFaint}}>Your trip ✦</span>
         )}
       </div>
     </div>
@@ -196,7 +249,7 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
   const [feed, setFeed]         = useState([]);
   const [discover, setDiscover] = useState([]);
   const [following, setFollowing] = useState([]);
-  const [followingList, setFollowingList] = useState([]); // full profiles
+  const [followingList, setFollowingList] = useState([]);
   const [followers, setFollowers] = useState([]);
   const [search, setSearch]     = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -226,23 +279,19 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
       setFollowing(followingIds);
       setFollowers(fwers || []);
 
-      // Fetch profiles of people you follow
       if (followingIds.length > 0) {
         const { data: fwingProfiles } = await supabase
-          .from("profiles")
-          .select("id, name, travel_dna")
-          .in("id", followingIds);
+          .from("profiles").select("id, name, travel_dna").in("id", followingIds);
         setFollowingList(fwingProfiles || []);
-      }
 
-      if (followingIds.length > 0) {
         const { data } = await supabase.from("trips")
           .select("*, profiles(name, travel_dna)")
           .in("user_id", [...followingIds, user.id])
           .eq("is_public", true)
           .order("saved_at", { ascending: false })
           .limit(20);
-        setFeed(data || []);
+        const dedupFeed = (data || []).filter((t,_,arr) => arr.findIndex(x => x.city?.split(",")[0] === t.city?.split(",")[0] && x.user_id === t.user_id) === arr.indexOf(t));
+        setFeed(dedupFeed);
       }
     }
 
@@ -251,11 +300,10 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
       .eq("is_public", true)
       .order("saved_at", { ascending: false })
       .limit(30);
-    setDiscover(all || []);
+    const dedupDiscover = (all || []).filter((t,_,arr) => arr.findIndex(x => x.city?.split(",")[0] === t.city?.split(",")[0]) === arr.indexOf(t));
+    setDiscover(dedupDiscover);
     setLoading(false);
 
-    // Fetch public place ratings
-    // Fetch place ratings then join profiles manually
     const { data: ratingsData } = await supabase
       .from("place_ratings")
       .select("*")
@@ -266,9 +314,7 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
     if (ratingsData?.length) {
       const userIds = [...new Set(ratingsData.map(r => r.user_id))];
       const { data: ratingProfiles } = await supabase
-        .from("profiles")
-        .select("id, name, travel_dna")
-        .in("id", userIds);
+        .from("profiles").select("id, name, travel_dna").in("id", userIds);
       const profileMap = Object.fromEntries((ratingProfiles||[]).map(p => [p.id, p]));
       setPlaceRatings(ratingsData.map(r => ({ ...r, profiles: profileMap[r.user_id] || null })));
     } else {
@@ -296,17 +342,24 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
 
   const tabs = [
     { id:"discover", label:"Discover" },
-    ...(user && feed.length > 0 ? [{ id:"friends", label:`Friends${feed.length > 0 ? ` · ${feed.length}` : ""}` }] : []),
+    ...(user && feed.length > 0 ? [{ id:"friends", label:"Friends" }] : []),
     { id:"find", label:"Find people" },
   ];
 
-  // Merge trips and ratings for discover feed, sorted by recency
-  const mergedDiscover = [...discover.map(t => ({...t, _type:"trip", _at: t.saved_at})),
-    ...placeRatings.map(r => ({...r, _type:"rating", _at: r.rated_at}))]
-    .sort((a,b) => new Date(b._at) - new Date(a._at))
-    .slice(0, 40);
+  // Bucket trips by status
+  const bucketTrips = (trips) => {
+    const active = [], upcoming = [], past = [];
+    trips.forEach(t => {
+      const s = getTripStatus(t);
+      if (s === "active") active.push(t);
+      else if (s === "upcoming") upcoming.push(t);
+      else past.push(t);
+    });
+    return { active, upcoming, past };
+  };
 
-  const displayFeed = tab === "friends" ? feed : mergedDiscover;
+  const sourceTrips = tab === "friends" ? feed : discover;
+  const { active: activeTrips, upcoming: upcomingTrips, past: pastTrips } = bucketTrips(sourceTrips);
 
   return (
     <div style={{minHeight:"100vh",background:T.cream,fontFamily:"'DM Sans',sans-serif",paddingBottom:NAV_H+20}}>
@@ -314,12 +367,12 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
 
       {/* Header */}
       <div style={{background:T.ink,padding:"52px 20px 0"}}>
-        <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.22em",textTransform:"uppercase",color:"rgba(196,154,60,0.7)",marginBottom:8}}>✦ FRIENDS</div>
-        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"white",marginBottom:16,lineHeight:1.1}}>Where friends wander.</h1>
+        <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.22em",textTransform:"uppercase",color:"rgba(196,154,60,0.7)",marginBottom:8}}>✦ COMMUNITY</div>
+        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"white",marginBottom:4,lineHeight:1.1}}>Where travelers wander.</h1>
+        <p style={{fontSize:12,color:"rgba(255,255,255,0.35)",marginBottom:16,lineHeight:1.5}}>Discover trips, remix plans, follow people with your travel style.</p>
 
-        {/* Stats row */}
         {user && (
-          <div style={{display:"flex",gap:16,marginBottom:16}}>
+          <div style={{display:"flex",gap:20,marginBottom:16}}>
             <div style={{textAlign:"center",cursor:"pointer"}} onClick={()=>setTab("find")}>
               <div style={{fontSize:18,fontWeight:800,color:"white"}}>{following.length}</div>
               <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:"0.1em"}}>Following</div>
@@ -331,13 +384,12 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
             </div>
             <div style={{width:1,background:"rgba(255,255,255,0.1)"}}/>
             <div style={{textAlign:"center"}}>
-              <div style={{fontSize:18,fontWeight:800,color:"white"}}>{discover.length}</div>
-              <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:"0.1em"}}>Trips</div>
+              <div style={{fontSize:18,fontWeight:800,color:"white"}}>{placeRatings.length}</div>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:"0.1em"}}>Reviews</div>
             </div>
           </div>
         )}
 
-        {/* Tabs */}
         <div style={{display:"flex",gap:0,borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
           {tabs.map(t => (
             <button key={t.id} onClick={()=>setTab(t.id)}
@@ -348,7 +400,7 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
         </div>
       </div>
 
-      {/* Sign-in nudge for logged out users — only on Discover */}
+      {/* Sign-in nudge */}
       {!user && tab === "discover" && (
         <div style={{margin:"16px 16px 0",background:T.ink,borderRadius:18,padding:"16px 18px",display:"flex",alignItems:"center",gap:14}}>
           <div style={{fontSize:28}}>👋</div>
@@ -365,35 +417,64 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
 
       {/* Feed */}
       {(tab === "discover" || tab === "friends") && (
-        <div style={{padding:"16px"}}>
+        <div style={{padding:"14px 14px 0"}}>
           {loading ? (
-            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {[1,2,3].map(i=>(
-                <div key={i} style={{background:T.white,borderRadius:20,height:260,border:`1px solid ${T.dust}`,animation:"pulse 1.5s ease infinite"}}/>
+                <div key={i} style={{background:T.white,borderRadius:18,height:200,border:`1px solid ${T.dust}`,animation:"pulse 1.5s ease infinite"}}/>
               ))}
             </div>
-          ) : displayFeed.length === 0 ? (
+          ) : (activeTrips.length + upcomingTrips.length + pastTrips.length + placeRatings.length) === 0 ? (
             <div style={{textAlign:"center",padding:"48px 20px"}}>
-              <div style={{fontSize:40,marginBottom:12}}>🌍</div>
+              <div style={{fontSize:40,marginBottom:12}}>{tab==="friends" ? "👀" : "🌍"}</div>
               <div style={{fontSize:16,fontWeight:700,color:T.ink,marginBottom:8}}>
-                {tab==="friends" ? "No trips from friends yet" : "No trips yet"}
+                {tab==="friends" ? "Nothing from your friends yet" : "Be the first to explore"}
               </div>
-              <div style={{fontSize:13,color:T.inkFaint,lineHeight:1.6,marginBottom:20}}>
-                {tab==="friends" ? "Follow some people to see their trips here." : "Be the first to save a trip!"}
+              <div style={{fontSize:13,color:T.inkFaint,lineHeight:1.6,marginBottom:20,maxWidth:260,margin:"0 auto 20px"}}>
+                {tab==="friends"
+                  ? "Follow people to see where they're traveling. Or save your own trips — they'll show up here too."
+                  : "Save a trip, rate a place, and your activity will appear here for others to discover and remix."}
               </div>
-              {tab==="friends" && (
-                <button onClick={()=>setTab("find")}
-                  style={{padding:"12px 24px",borderRadius:14,background:T.ink,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                  Find friends →
-                </button>
-              )}
+              <button onClick={()=>setTab(tab==="friends"?"find":"find")}
+                style={{padding:"12px 24px",borderRadius:14,background:T.ink,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                {tab==="friends" ? "Find people to follow →" : "Find people →"}
+              </button>
             </div>
           ) : (
-            displayFeed.map((item, i) => (
-              item._type === "rating"
-                ? <RatingCard key={`r-${item.id}`} rating={item} onPlanCity={onPlanCity}/>
-                : <TripCard key={`t-${item.id}`} trip={item} user={user} following={following} followUser={followUser} onRemix={onRemix}/>
-            ))
+            <>
+              {/* 🟢 Live now */}
+              {activeTrips.length > 0 && (
+                <FeedSection label="🟢 Happening now" accent={T.sage}>
+                  {activeTrips.map(t => <TripCard key={t.id} trip={t} user={user} following={following} followUser={followUser} onRemix={onRemix} status="active"/>)}
+                </FeedSection>
+              )}
+
+              {/* 📅 Upcoming */}
+              {upcomingTrips.length > 0 && (
+                <FeedSection label="📅 Upcoming trips">
+                  {upcomingTrips.map(t => <TripCard key={t.id} trip={t} user={user} following={following} followUser={followUser} onRemix={onRemix} status="upcoming"/>)}
+                </FeedSection>
+              )}
+
+              {/* 🗺 Past trips */}
+              {pastTrips.length > 0 && (
+                <FeedSection label="🗺 Past trips">
+                  {pastTrips.map(t => <TripCard key={t.id} trip={t} user={user} following={following} followUser={followUser} onRemix={onRemix} status="past"/>)}
+                </FeedSection>
+              )}
+
+              {/* ⭐ Reviews — only in Friends tab (has context), or as secondary section in Discover */}
+              {placeRatings.length > 0 && (
+                <FeedSection label={tab === "friends" ? "⭐ What they're rating" : "⭐ Community reviews"} accent={tab === "friends" ? T.gold : T.inkFaint}>
+                  {(tab === "friends" ? placeRatings : placeRatings.slice(0, 3)).map(r => <RatingCard key={r.id} rating={r} onPlanCity={onPlanCity}/>)}
+                  {tab !== "friends" && placeRatings.length > 3 && (
+                    <div style={{textAlign:"center",padding:"4px 0 8px"}}>
+                      <span style={{fontSize:12,color:T.inkFaint}}>+ {placeRatings.length - 3} more reviews</span>
+                    </div>
+                  )}
+                </FeedSection>
+              )}
+            </>
           )}
         </div>
       )}
@@ -401,7 +482,7 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
       {/* Find people */}
       {tab === "find" && (
         <div style={{padding:"16px"}}>
-          <div style={{position:"relative",marginBottom:16}}>
+          <div style={{marginBottom:16}}>
             <input value={search} onChange={e=>searchUsers(e.target.value)}
               placeholder="Search by name…"
               style={{width:"100%",padding:"13px 16px",borderRadius:14,border:`1.5px solid ${search?T.accent:T.dust}`,background:T.white,color:T.ink,fontSize:14,outline:"none",transition:"border-color 0.2s"}}/>
@@ -412,33 +493,30 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
           )}
 
           {searchResults.map(u => (
-            <div key={u.id} style={{background:T.white,borderRadius:16,padding:"14px 16px",marginBottom:8,display:"flex",alignItems:"center",gap:12,border:`1px solid ${T.dust}`}}>
-              <Avatar name={u.name} size={42} color={T.accent}/>
+            <div key={u.id} style={{background:T.white,borderRadius:14,padding:"13px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12,border:`1px solid ${T.dust}`}}>
+              <Avatar name={u.name} size={40} color={T.accent}/>
               <div style={{flex:1}}>
                 <div style={{fontSize:14,fontWeight:700,color:T.ink}}>{u.name}</div>
-                {u.travel_dna && <div style={{fontSize:11,color:T.inkFaint,marginTop:2}}>{u.travel_dna}</div>}
+                {u.travel_dna && <div style={{fontSize:11,color:T.inkFaint,marginTop:1}}>{u.travel_dna}</div>}
               </div>
               {user && u.id !== user.id && (
                 <button onClick={()=>followUser(u.id)}
-                  style={{padding:"8px 16px",borderRadius:20,background:following.includes(u.id)?T.paper:`linear-gradient(135deg,${T.accent},#9b2020)`,border:`1px solid ${following.includes(u.id)?T.dust:"transparent"}`,color:following.includes(u.id)?T.inkLight:T.white,fontSize:12,fontWeight:700,cursor:"pointer",transition:"all 0.15s",boxShadow:following.includes(u.id)?"none":"0 2px 8px rgba(200,75,47,0.2)"}}>
+                  style={{padding:"7px 14px",borderRadius:20,background:following.includes(u.id)?T.paper:`linear-gradient(135deg,${T.accent},#9b2020)`,border:`1px solid ${following.includes(u.id)?T.dust:"transparent"}`,color:following.includes(u.id)?T.inkLight:T.white,fontSize:12,fontWeight:700,cursor:"pointer"}}>
                   {following.includes(u.id) ? "Following" : "+ Follow"}
                 </button>
               )}
             </div>
           ))}
 
-          {/* People you follow */}
           {search.length < 2 && followingList.length > 0 && (
             <>
-              <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",color:T.inkFaint,marginBottom:10}}>
-                People you follow
-              </div>
+              <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",color:T.inkFaint,marginBottom:10}}>People you follow</div>
               {followingList.map(u => (
-                <div key={u.id} style={{background:T.white,borderRadius:16,padding:"14px 16px",marginBottom:8,display:"flex",alignItems:"center",gap:12,border:`1px solid ${T.dust}`}}>
-                  <Avatar name={u.name} size={42} color={T.accent}/>
+                <div key={u.id} style={{background:T.white,borderRadius:14,padding:"13px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12,border:`1px solid ${T.dust}`}}>
+                  <Avatar name={u.name} size={40} color={T.accent}/>
                   <div style={{flex:1}}>
                     <div style={{fontSize:14,fontWeight:700,color:T.ink}}>{u.name}</div>
-                    {u.travel_dna && <div style={{fontSize:11,color:T.inkFaint,marginTop:2}}>{u.travel_dna}</div>}
+                    {u.travel_dna && <div style={{fontSize:11,color:T.inkFaint,marginTop:1}}>{u.travel_dna}</div>}
                   </div>
                   <button onClick={()=>followUser(u.id)}
                     style={{padding:"7px 14px",borderRadius:20,background:T.paper,border:`1px solid ${T.dust}`,color:T.inkLight,fontSize:12,fontWeight:700,cursor:"pointer"}}>
@@ -450,20 +528,17 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
             </>
           )}
 
-          {/* Followers list */}
           {search.length < 2 && followers.length > 0 && (
             <>
-              <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",color:T.inkFaint,marginBottom:10,marginTop:8}}>
-                Your followers
-              </div>
+              <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",color:T.inkFaint,marginBottom:10,marginTop:8}}>Your followers</div>
               {followers.map(f => (
-                <div key={f.follower_id} style={{background:T.white,borderRadius:16,padding:"14px 16px",marginBottom:8,display:"flex",alignItems:"center",gap:12,border:`1px solid ${T.dust}`}}>
-                  <Avatar name={f.profiles?.name} size={42} color={T.sage}/>
+                <div key={f.follower_id} style={{background:T.white,borderRadius:14,padding:"13px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12,border:`1px solid ${T.dust}`}}>
+                  <Avatar name={f.profiles?.name} size={40} color={T.sage}/>
                   <div style={{flex:1}}>
                     <div style={{fontSize:14,fontWeight:700,color:T.ink}}>{f.profiles?.name || "Wanderer"}</div>
-                    {f.profiles?.travel_dna && <div style={{fontSize:11,color:T.inkFaint,marginTop:2}}>{f.profiles.travel_dna}</div>}
+                    {f.profiles?.travel_dna && <div style={{fontSize:11,color:T.inkFaint,marginTop:1}}>{f.profiles.travel_dna}</div>}
                   </div>
-                  <div style={{fontSize:11,color:T.inkFaint}}>follows you</div>
+                  <span style={{fontSize:11,color:T.inkFaint}}>follows you</span>
                 </div>
               ))}
             </>

@@ -235,6 +235,15 @@ const CITY_PHOTOS = {
   "Copenhagen":  "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=600&q=80",
   "Porto":       "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=600&q=80",
   "Singapore":   "https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=600&q=80",
+  "Kansas City": "https://images.unsplash.com/photo-1617581629397-a72507c3de9e?w=600&q=80",
+  "Chicago":     "https://images.unsplash.com/photo-1494522855154-9297ac14b55f?w=600&q=80",
+  "Los Angeles": "https://images.unsplash.com/photo-1580655653885-65763b2597d0?w=600&q=80",
+  "San Francisco":"https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=600&q=80",
+  "Rome":        "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=600&q=80",
+  "Vienna":      "https://images.unsplash.com/photo-1516550135131-fe3dcdd41f15?w=600&q=80",
+  "Prague":      "https://images.unsplash.com/photo-1541849546-216549ae216d?w=600&q=80",
+  "Dubrovnik":   "https://images.unsplash.com/photo-1555990793-da11153b2473?w=600&q=80",
+  "Santorini":   "https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=600&q=80",
 };
 
 const TRANSIT_ICONS = { walk:"🚶", subway:"🚇", taxi:"🚕", uber:"U", lyft:"L", bus:"🚌", tram:"🚊", "tuk-tuk":"🛺", ferry:"🚢", bike:"🚲", drive:"🚗" };

@@ -17,7 +17,7 @@ const getDayDate = (dates, dayIdx) => {
   } catch { return null; }
 };
 
-function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, preloadedDays, supabase, user }) {
+function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, onSave, preloadedDays, onDaysGenerated, supabase, user }) {
   // Deduplicate days — keep only first occurrence of each day number
   const dedupeDays = (days) => {
     const seen = new Set();
@@ -49,7 +49,7 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
   const totalDays = countDays(dates);
   const dayVibes  = moodContext.split("\n").filter(Boolean);
 
-  const BACKEND = "https://wandr-62i6.onrender.com";
+  const BACKEND = import.meta.env.VITE_BACKEND || "https://wandr-62i6.onrender.com";
 
   const cityShort = city?.split(",")[0] || city;
 
@@ -63,6 +63,11 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
     "Sourcing the best photo spots…",
     "Curating the perfect pace for you…",
   ];
+
+  // Sync generated days back to parent so resume doesn't re-fetch
+  useEffect(() => {
+    if (daysData.length > 0) onDaysGenerated?.(daysData);
+  }, [daysData]);
 
   // Rotate loading tips every 2.8s while generating
   useEffect(() => {
@@ -93,7 +98,8 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
             dayVibe: dayVibes[d-1] || "open / flexible",
             totalDays,
             travelProfile: profile?.answers || null,
-            usedPlaces // pass places already used in previous days
+            usedPlaces, // pass places already used in previous days
+            homeBase: homeBase || null
           })
         }).then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e.error || "Error")));
 
@@ -599,7 +605,31 @@ function ItineraryView({ city, dates, moodContext, profile, onBack, onSave, prel
         </div>
         <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.16em",textTransform:"uppercase",color:"rgba(196,154,60,0.7)",marginBottom:6}}>✦ YOUR ITINERARY</div>
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:T.white,marginBottom:4}}>{city}</div>
-        {dates&&<div style={{fontSize:12,color:"rgba(255,255,255,0.4)"}}>{dates}</div>}
+        {dates&&<div style={{fontSize:12,color:"rgba(255,255,255,0.4)",marginBottom:6}}>{dates}</div>}
+        {profile?.answers && (() => {
+          const a = profile.answers;
+          const traits = [];
+          if (a.pace==="slow") traits.push("Slow pace");
+          if (a.pace==="fast") traits.push("Packed days");
+          if (a.vibe==="immerse") traits.push("Local spots");
+          if (a.vibe==="relax") traits.push("Relaxed vibe");
+          if (a.vibe==="explore") traits.push("Explorer");
+          if (a.food==="everything") traits.push("Food-first");
+          if (a.food==="local") traits.push("Local eats");
+          if (a.budget==="luxury") traits.push("Luxury");
+          if (a.budget==="budget") traits.push("Budget-friendly");
+          if (a.companions==="solo") traits.push("Solo-friendly");
+          if (a.companions==="partner") traits.push("Romantic");
+          if (!traits.length) return null;
+          return (
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:2}}>
+              <span style={{fontSize:10,color:"rgba(255,255,255,0.3)",fontWeight:600,letterSpacing:"0.06em"}}>PERSONALIZED</span>
+              {traits.slice(0,4).map(t=>(
+                <span key={t} style={{fontSize:10,fontWeight:700,color:"rgba(196,154,60,0.8)",background:"rgba(196,154,60,0.1)",borderRadius:20,padding:"2px 8px",border:"1px solid rgba(196,154,60,0.2)"}}>{t}</span>
+              ))}
+            </div>
+          );
+        })()}
         {/* Day progress bars */}
         <div style={{display:"flex",gap:5,marginTop:14}}>
           {Array(totalDays).fill(null).map((_,i)=>(
