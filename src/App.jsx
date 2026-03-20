@@ -59,18 +59,31 @@ export default function App() {
         loadProfile(session.user.id);
         loadTrips(session.user.id);
       } else {
+        // No active session — clear any stale account trips from localStorage
+        // (keeps only local-only trips that were never synced to an account)
+        try {
+          const local = JSON.parse(localStorage.getItem("wandr_trips") || "[]");
+          const anonOnly = local.filter(t => !t.user_id);
+          localStorage.setItem("wandr_trips", JSON.stringify(anonOnly));
+          setSavedTrips(anonOnly);
+        } catch(e) {}
         // Show splash for new users, unless they've seen it before
         const seen = localStorage.getItem("wandr-seen-splash");
         setScreen(prev => prev === "loading" ? (seen ? "home" : "splash") : prev);
       }
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         loadProfile(session.user.id);
         loadTrips(session.user.id);
-      } else {
-        // Don't redirect — let them stay where they are
+      } else if (event === "SIGNED_OUT") {
+        // Clear all account data immediately on sign-out
+        setSavedTrips([]);
+        setProfile(null);
+        setOpenTrip(null);
+        try { localStorage.removeItem("wandr_trips"); } catch(e) {}
+        setRefreshKey(k => k + 1); // force HomeScreen community feed to re-fetch without user
       }
     });
     return () => { subscription.unsubscribe(); clearTimeout(timeout); };

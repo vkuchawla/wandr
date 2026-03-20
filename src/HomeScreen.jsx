@@ -15,19 +15,26 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
 
   const [userLoaded, setUserLoaded] = useState(false);
 
+  // Clear community feed immediately when user signs out
+  useEffect(() => {
+    if (!user) setFriendActivity([]);
+  }, [user]);
+
   useEffect(() => {
     if (!supabase) return;
     // Wait for auth to settle before fetching - check session first
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user || null;
       setUserLoaded(true);
-      const query = supabase.from("trips")
+      // Only fetch community trips if there's an active session
+      if (!currentUser) { setFriendActivity([]); return; }
+      supabase.from("trips")
         .select("*, profiles(name, travel_dna)")
         .eq("is_public", true)
+        .neq("user_id", currentUser.id)
         .order("saved_at", { ascending: false })
-        .limit(10);
-      const finalQuery = currentUser ? query.neq("user_id", currentUser.id) : query;
-      finalQuery.then(({ data }) => setFriendActivity(data || []));
+        .limit(10)
+        .then(({ data }) => setFriendActivity(data || []));
     });
   }, [refreshKey]);
 
