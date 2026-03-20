@@ -295,13 +295,18 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
       }
     }
 
-    const { data: all } = await supabase.from("trips")
-      .select("*, profiles(name, travel_dna)")
-      .eq("is_public", true)
-      .order("saved_at", { ascending: false })
-      .limit(30);
-    const dedupDiscover = (all || []).filter((t,_,arr) => arr.findIndex(x => x.city?.split(",")[0] === t.city?.split(",")[0]) === arr.indexOf(t));
-    setDiscover(dedupDiscover);
+    if (user) {
+      const { data: all } = await supabase.from("trips")
+        .select("*, profiles(name, travel_dna)")
+        .eq("is_public", true)
+        .neq("user_id", user.id)
+        .order("saved_at", { ascending: false })
+        .limit(30);
+      const dedupDiscover = (all || []).filter((t,_,arr) => arr.findIndex(x => x.city?.split(",")[0] === t.city?.split(",")[0]) === arr.indexOf(t));
+      setDiscover(dedupDiscover);
+    } else {
+      setDiscover([]);
+    }
     setLoading(false);
 
     const { data: ratingsData } = await supabase
@@ -360,6 +365,23 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
 
   const sourceTrips = tab === "friends" ? feed : discover;
   const { active: activeTrips, upcoming: upcomingTrips, past: pastTrips } = bucketTrips(sourceTrips);
+
+  // Signed-out gate — show nothing personal
+  if (!user) return (
+    <div style={{minHeight:"100vh",background:T.cream,fontFamily:"'DM Sans',sans-serif",paddingBottom:NAV_H+20}}>
+      <style>{GLOBAL_CSS}</style>
+      <div style={{background:`linear-gradient(160deg,${T.ink} 0%,#2d1f10 100%)`,padding:"52px 20px 40px",textAlign:"center"}}>
+        <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.22em",textTransform:"uppercase",color:"rgba(196,154,60,0.7)",marginBottom:12}}>✦ COMMUNITY</div>
+        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:700,color:"white",marginBottom:8,lineHeight:1.2}}>Where travelers wander.</h1>
+        <p style={{fontSize:13,color:"rgba(255,255,255,0.38)",lineHeight:1.6,maxWidth:280,margin:"0 auto"}}>Sign in to discover trips, follow travelers, and share your adventures.</p>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"48px 24px",gap:16}}>
+        <div style={{fontSize:48,lineHeight:1}}>✈️</div>
+        <div style={{fontSize:15,fontWeight:700,color:T.ink,textAlign:"center"}}>Join the community</div>
+        <div style={{fontSize:13,color:T.inkFaint,textAlign:"center",lineHeight:1.6,maxWidth:260}}>See where other travelers are going, remix their plans, and share your own trips.</div>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{minHeight:"100vh",background:T.cream,fontFamily:"'DM Sans',sans-serif",paddingBottom:NAV_H+20}}>
