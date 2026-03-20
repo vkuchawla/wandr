@@ -312,7 +312,7 @@ function ProfileScreen({ profile, onSaveProfile, isOnboarding = false, supabase,
               🔄 Update travel preferences
             </button>
             {supabase && (
-              <button onClick={async()=>{await supabase.auth.signOut();window.location.reload();}}
+              <button onClick={async()=>{ await supabase.auth.signOut(); }}
                 style={{width:"100%",padding:13,borderRadius:14,background:"#fef2f2",border:"1.5px solid #fcc",color:"#c84b2f",fontSize:13,fontWeight:600,cursor:"pointer"}}>
                 Sign out
               </button>

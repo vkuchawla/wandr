@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { T, GLOBAL_CSS, NAV_H, MONTHS_FULL, MONTHS_SHORT, DAYS } from "./constants.jsx";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { T, GLOBAL_CSS, NAV_H, MONTHS_FULL, MONTHS_SHORT, DAYS, CITY_PHOTOS } from "./constants.jsx";
 function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, refreshKey }) {
   const [city, setCity]     = useState("");
   const [startDate, setStart] = useState(null);
@@ -11,7 +11,7 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [friendActivity, setFriendActivity] = useState([]);
   const autocompleteTimer = useRef(null);
-  const BACKEND = "https://wandr-62i6.onrender.com";
+  const BACKEND = import.meta.env.VITE_BACKEND || "https://wandr-62i6.onrender.com";
 
   const [userLoaded, setUserLoaded] = useState(false);
 
@@ -45,10 +45,10 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
   const pastTrips = savedTrips.filter(t => !upcomingTrips.includes(t));
 
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [coldStartMsg, setColdStartMsg] = useState("");
   const [quickPlan, setQuickPlan] = useState(null); // {city} when quick plan sheet is open
   const [quickVibes, setQuickVibes] = useState([]);
-  const [quickDates, setQuickDates] = useState("");
-
+  const [showQuickCal, setShowQuickCal] = useState(false);
   const QUICK_VIBES = [
     { id:"slow-morning", emoji:"☕", label:"Slow mornings" },
     { id:"street-food", emoji:"🍜", label:"Street food" },
@@ -60,15 +60,23 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
     { id:"chill-afternoon", emoji:"🌿", label:"Laid back" },
   ];
 
+  // Hero city — stable per session
+  const heroCityEntry = useMemo(() => {
+    const entries = Object.entries(CITY_PHOTOS);
+    return entries[Math.floor(Math.random() * entries.length)];
+  }, []);
+  const [heroCity, heroCityPhoto] = heroCityEntry;
+
   const handleQuickBuild = () => {
     if (!quickPlan) return;
     const moodCtx = quickVibes.length > 0
       ? `Day 1: ${quickVibes.map(v => QUICK_VIBES.find(q=>q.id===v)?.label||v).join(", ")}`
       : "";
-    onStart(quickPlan, quickDates, moodCtx);
+    onStart(quickPlan, dateString, moodCtx, "");
     setQuickPlan(null);
     setQuickVibes([]);
-    setQuickDates("");
+    setStart(null); setEnd(null); setPicking(null);
+    setShowQuickCal(false);
   };
 
   const handleCityChange = (val) => {
@@ -82,15 +90,21 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
         const data = await res.json();
         setSuggestions(data.suggestions || []);
         setShowSuggestions(true);
+        setColdStartMsg("");
       } catch(e) {
-        // Retry once after 2s (Render cold start)
+        // Render cold start — show friendly message and retry
+        setColdStartMsg("Server waking up ☕ — just a moment…");
         try {
-          await new Promise(r => setTimeout(r, 2000));
+          await new Promise(r => setTimeout(r, 5000));
           const res = await fetch(`${BACKEND}/autocomplete?q=${encodeURIComponent(val)}`);
           const data = await res.json();
           setSuggestions(data.suggestions || []);
           setShowSuggestions(true);
-        } catch { setSuggestions([]); }
+          setColdStartMsg("");
+        } catch {
+          setSuggestions([]);
+          setColdStartMsg("Can't reach server — check your connection.");
+        }
       } finally { setSuggestionsLoading(false); }
     }, 300);
   };
@@ -150,130 +164,229 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
     ? "Tap your trip to review the plan."
     : "Set your vibe. AI builds the rest.";
 
+  // Destination grid cities — shuffle deterministically, skip hero city
+  const destCities = useMemo(() => {
+    const allEntries = Object.entries(CITY_PHOTOS);
+    // Move hero city to front, then slice from index 1 to get 6 others
+    const without = allEntries.filter(([k]) => k !== heroCity);
+    return without.slice(0, 6);
+  }, [heroCity]);
+
+  // Time-based greeting
+  const hour = new Date().getHours();
+  const timeGreeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
   return (
     <div style={{minHeight:"100vh",background:T.cream,fontFamily:"'DM Sans',sans-serif",paddingBottom:NAV_H+20}}>
       <style>{GLOBAL_CSS}</style>
 
-      {/* Header — clean dark, no cream bleed */}
-      <div style={{padding:"52px 20px 24px",background:"linear-gradient(160deg,#1c1612 0%,#2d1f10 100%)",position:"relative",overflow:"hidden"}}>
-        <div style={{position:"absolute",inset:0,backgroundImage:"radial-gradient(circle at 20% 50%,rgba(196,154,60,0.08) 0%,transparent 60%)",pointerEvents:"none"}}/>
-        <div style={{position:"relative",zIndex:1}}>
-          {/* Greeting */}
-          {firstName && (
-            <div style={{fontSize:13,color:"rgba(255,255,255,0.4)",fontWeight:500,marginBottom:6}}>
-              Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {firstName} ✦
+      {/* ── 1. Full-bleed hero photo header ── */}
+      <div style={{position:"relative",height:220,overflow:"hidden",background:T.ink}}>
+        {/* Hero city photo */}
+        <img
+          src={heroCityPhoto}
+          alt={heroCity}
+          style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}
+          onError={e=>e.target.style.display="none"}
+        />
+        {/* Gradient overlay */}
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.7) 100%)"}}/>
+        {/* Radial gold glow */}
+        <div style={{position:"absolute",inset:0,backgroundImage:"radial-gradient(circle at 20% 50%,rgba(196,154,60,0.12) 0%,transparent 60%)",pointerEvents:"none"}}/>
+
+        {/* Top-left greeting */}
+        <div style={{position:"absolute",top:52,left:20,right:20,zIndex:2}}>
+          {firstName ? (
+            <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.75)",letterSpacing:"0.02em"}}>
+              {timeGreeting}, {firstName} ✦
+            </div>
+          ) : (
+            <div style={{fontSize:13,fontWeight:700,color:"rgba(255,255,255,0.75)",letterSpacing:"0.14em",textTransform:"uppercase"}}>
+              ✦ WANDR
             </div>
           )}
-          <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:32,fontWeight:900,color:T.white,lineHeight:1.1,marginBottom:6}}>
-            {heroLine}
-          </h1>
-          <p style={{fontSize:13,color:"rgba(255,255,255,0.35)",lineHeight:1.6}}>{subLine}</p>
         </div>
-      </div>
 
-      {/* Search card */}
-      <div style={{background:T.white,margin:"0 16px",borderRadius:20,padding:"16px",boxShadow:"0 4px 20px rgba(28,22,18,0.08)",position:"relative",zIndex:2,marginTop:16}}>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <div style={{flex:1,position:"relative"}}>
-            <input value={city} onChange={e=>handleCityChange(e.target.value)}
-              onKeyDown={e=>e.key==="Enter"&&city.trim()&&onStart(city.trim(),"")}
-              onBlur={()=>setTimeout(()=>setShowSuggestions(false),150)}
-              onFocus={()=>suggestions.length>0&&setShowSuggestions(true)}
-              placeholder="City or destination…"
-              style={{width:"100%",padding:"12px 16px",borderRadius:14,border:`1.5px solid ${city?T.accent:T.dust}`,background:T.cream,color:T.ink,fontSize:14,fontWeight:600,outline:"none",transition:"border-color 0.2s"}}/>
-            {(showSuggestions && suggestions.length > 0) || suggestionsLoading ? (
-              <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,right:0,background:T.white,borderRadius:14,boxShadow:"0 8px 24px rgba(28,22,18,0.12)",border:`1px solid ${T.dust}`,zIndex:50,overflow:"hidden"}}>
-                {suggestionsLoading && suggestions.length === 0 && (
-                  <div style={{padding:"12px 16px",fontSize:13,color:T.inkFaint}}>Searching…</div>
-                )}
-                {suggestions.map((s,i)=>(
-                  <button key={i} onMouseDown={()=>selectSuggestion(s)}
-                    style={{width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:10,borderBottom:i<suggestions.length-1?`1px solid ${T.dust}`:"none"}}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.paper}
-                    onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                    <span style={{fontSize:14}}>📍</span>
-                    <div>
-                      <div style={{fontSize:14,fontWeight:700,color:T.ink}}>{s.name}</div>
-                      {s.description&&<div style={{fontSize:12,color:T.inkFaint}}>{s.description}</div>}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : null}
+        {/* Bottom: city name + CTA */}
+        <div style={{position:"absolute",bottom:20,left:20,right:20,zIndex:2,display:"flex",alignItems:"flex-end",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:900,color:"white",lineHeight:1.1,textShadow:"0 2px 12px rgba(0,0,0,0.4)"}}>
+              {heroCity}
+            </div>
           </div>
-          <button onClick={()=>{ if(city.trim()){ setQuickPlan(city.trim()); setShowSuggestions(false); }}}
-            style={{flexShrink:0,padding:"12px 18px",borderRadius:14,background:city.trim()?`linear-gradient(135deg,${T.accent},#9b2020)`:T.dust,border:"none",color:"white",fontSize:14,fontWeight:800,cursor:city.trim()?"pointer":"default",transition:"background 0.2s",boxShadow:city.trim()?"0 4px 14px rgba(200,75,47,0.3)":"none"}}>
-            →
+          <button
+            onClick={()=>setQuickPlan(heroCity)}
+            style={{flexShrink:0,padding:"9px 16px",borderRadius:20,background:T.accent,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 14px rgba(200,75,47,0.45)",whiteSpace:"nowrap",marginLeft:12}}>
+            Plan this trip →
           </button>
         </div>
-
-        {/* Quick city chips — removed, search is enough */}
       </div>
 
-      {/* Upcoming trip hero */}
-      {upcomingTrips.length > 0 && (
-        <div style={{padding:"16px 16px 0"}}>
-          {upcomingTrips.map((trip,i)=>{
-            const parts = (trip.dates||"").split("–")[0].trim();
-            const d = new Date(parts + ", " + new Date().getFullYear());
-            const diff = Math.ceil((d - today) / 86400000);
-            return (
-              <div key={i} onClick={()=>onOpenTrip(trip)}
-                style={{background:`linear-gradient(135deg,${T.ink},#2d1f10)`,borderRadius:20,padding:"18px 20px",cursor:"pointer",boxShadow:"0 6px 24px rgba(28,22,18,0.15)",marginBottom:10,position:"relative",overflow:"hidden"}}>
-                <div style={{position:"absolute",top:-20,right:-20,fontSize:80,opacity:0.04,fontFamily:"serif"}}>✦</div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                  <div style={{background:"rgba(255,255,255,0.08)",borderRadius:10,padding:"4px 10px",display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"0.1em"}}>
-                      {diff === 0 ? "Today" : diff === 1 ? "Tomorrow" : `In ${diff} days`}
-                    </span>
-                  </div>
-                  <span style={{fontSize:12,color:"rgba(255,255,255,0.3)"}}>{trip.dates}</span>
+      {/* ── 2. Search bar — overlaps hero ── */}
+      <div style={{margin:"0 16px",position:"relative",zIndex:10,marginTop:-28}}>
+        <div style={{background:T.white,borderRadius:20,padding:"16px",boxShadow:"0 4px 20px rgba(28,22,18,0.12)"}}>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <div style={{flex:1,position:"relative"}}>
+              <input value={city} onChange={e=>handleCityChange(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Enter"&&city.trim()){ setQuickPlan(city.trim()); setShowSuggestions(false); } }}
+                onBlur={()=>setTimeout(()=>setShowSuggestions(false),150)}
+                onFocus={()=>suggestions.length>0&&setShowSuggestions(true)}
+                placeholder="City or destination…"
+                style={{width:"100%",padding:"12px 16px",borderRadius:14,border:`1.5px solid ${city?T.accent:T.dust}`,background:T.cream,color:T.ink,fontSize:14,fontWeight:600,outline:"none",transition:"border-color 0.2s"}}/>
+              {(showSuggestions && suggestions.length > 0) || suggestionsLoading ? (
+                <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,right:0,background:T.white,borderRadius:14,boxShadow:"0 8px 24px rgba(28,22,18,0.12)",border:`1px solid ${T.dust}`,zIndex:50,overflow:"hidden"}}>
+                  {suggestionsLoading && suggestions.length === 0 && (
+                    <div style={{padding:"12px 16px",fontSize:13,color:T.inkFaint}}>Searching…</div>
+                  )}
+                  {suggestions.map((s,i)=>(
+                    <button key={i} onMouseDown={()=>selectSuggestion(s)}
+                      style={{width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:10,borderBottom:i<suggestions.length-1?`1px solid ${T.dust}`:"none"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.paper}
+                      onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                      <span style={{fontSize:14}}>📍</span>
+                      <div>
+                        <div style={{fontSize:14,fontWeight:700,color:T.ink}}>{s.name}</div>
+                        {s.description&&<div style={{fontSize:12,color:T.inkFaint}}>{s.description}</div>}
+                      </div>
+                    </button>
+                  ))}
                 </div>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"white",marginBottom:4}}>
-                  {trip.city?.split(",")[0]}
-                </div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <div style={{fontSize:12,color:"rgba(255,255,255,0.4)"}}>
-                    {Array.isArray(trip.days)?trip.days.length:0} days planned
-                  </div>
-                  <div style={{background:T.accent,borderRadius:10,padding:"5px 12px",fontSize:12,fontWeight:700,color:"white"}}>
-                    View itinerary →
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+              ) : null}
+            </div>
+            <button onClick={()=>{ if(city.trim()){ setQuickPlan(city.trim()); setShowSuggestions(false); }}}
+              style={{flexShrink:0,padding:"12px 18px",borderRadius:14,background:city.trim()?`linear-gradient(135deg,${T.accent},#9b2020)`:T.dust,border:"none",color:"white",fontSize:14,fontWeight:800,cursor:city.trim()?"pointer":"default",transition:"background 0.2s",boxShadow:city.trim()?"0 4px 14px rgba(200,75,47,0.3)":"none"}}>
+              →
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Cold-start message */}
+      {coldStartMsg && (
+        <div style={{padding:"8px 20px 0",fontSize:12,color:T.inkFaint,textAlign:"center",animation:"fadeIn 0.4s ease"}}>
+          {coldStartMsg}
         </div>
       )}
 
-      {/* Friends planning — horizontal scroll */}
-      {friendActivity.filter(t => !user || t.user_id !== user.id).length > 0 && (
+      {/* ── 3. Quick mood row ── */}
+      <div style={{padding:"16px 16px 0"}}>
+        <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:T.inkFaint,marginBottom:10}}>
+          What's the vibe?
+        </div>
+        <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
+          {QUICK_VIBES.map(v => (
+            <button
+              key={v.id}
+              onClick={()=>{ setQuickVibes([v.id]); setQuickPlan(heroCity); }}
+              style={{flexShrink:0,display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:20,background:T.white,border:`1.5px solid ${T.dust}`,color:T.ink,fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
+              <span>{v.emoji}</span>
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 4. Personalized stats card ── */}
+      {(() => {
+        const totalTrips = savedTrips.length;
+        const uniqueCities = [...new Set(savedTrips.map(t => t.city?.split(",")[0]?.trim()).filter(Boolean))].length;
+        const totalDays = savedTrips.reduce((sum, t) => sum + (Array.isArray(t.days) ? t.days.length : 0), 0);
+        const allVibes = savedTrips.flatMap(t =>
+          (t.mood_context||"").split("\n").flatMap(l => l.split(":")[1]?.split(",").map(v=>v.trim())||[])
+        ).filter(Boolean);
+        const topVibe = allVibes.length > 0
+          ? Object.entries(allVibes.reduce((acc, v) => { acc[v] = (acc[v]||0)+1; return acc; }, {})).sort((a,b)=>b[1]-a[1])[0]?.[0]
+          : null;
+
+        if (!user && totalTrips === 0) return null; // hide if no data and not logged in
+
+        return (
+          <div style={{padding:"16px 16px 0"}}>
+            <div style={{borderRadius:20,background:`linear-gradient(135deg,${T.ink} 0%,#2d1f10 100%)`,padding:"20px",boxShadow:"0 6px 24px rgba(28,22,18,0.18)",position:"relative",overflow:"hidden"}}>
+              <div style={{position:"absolute",top:0,right:0,width:120,height:120,backgroundImage:"radial-gradient(circle at 100% 0%,rgba(196,154,60,0.12) 0%,transparent 70%)",pointerEvents:"none"}}/>
+
+              {/* Greeting + name */}
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",color:"rgba(196,154,60,0.7)",marginBottom:4}}>✦ YOUR WANDR STORY</div>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:"white",lineHeight:1.2}}>
+                  {firstName ? `${firstName}'s adventures` : "Your adventures"}
+                  {totalTrips === 0 && <span style={{fontWeight:400,fontStyle:"italic",color:"rgba(255,255,255,0.4)",fontSize:18}}> are just beginning.</span>}
+                </div>
+              </div>
+
+              {/* Stats row */}
+              {totalTrips > 0 && (
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:1,background:"rgba(255,255,255,0.06)",borderRadius:14,overflow:"hidden",marginBottom:16}}>
+                  {[
+                    { val: totalTrips, label: totalTrips === 1 ? "trip" : "trips" },
+                    { val: uniqueCities, label: uniqueCities === 1 ? "city" : "cities" },
+                    { val: totalDays, label: totalDays === 1 ? "day" : "days" },
+                  ].map((s, i) => (
+                    <div key={i} style={{padding:"12px 8px",textAlign:"center",background:"rgba(255,255,255,0.04)"}}>
+                      <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"white",lineHeight:1}}>{s.val}</div>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontWeight:600,marginTop:3,textTransform:"uppercase",letterSpacing:"0.08em"}}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Next trip or top vibe or empty CTA */}
+              {nextTrip ? (
+                <div onClick={()=>onOpenTrip(nextTrip)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"rgba(255,255,255,0.07)",borderRadius:12,padding:"10px 14px",cursor:"pointer"}}>
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:"rgba(196,154,60,0.8)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:2}}>
+                      {daysUntil === 0 ? "✈ Today!" : daysUntil === 1 ? "✈ Tomorrow" : `✈ In ${daysUntil} days`}
+                    </div>
+                    <div style={{fontSize:14,fontWeight:700,color:"white"}}>{nextTrip.city?.split(",")[0]}</div>
+                  </div>
+                  <div style={{background:T.accent,borderRadius:10,padding:"6px 12px",fontSize:11,fontWeight:800,color:"white"}}>View plan →</div>
+                </div>
+              ) : topVibe ? (
+                <div style={{fontSize:12,color:"rgba(255,255,255,0.35)",lineHeight:1.5}}>
+                  Your favourite vibe: <span style={{color:"rgba(255,255,255,0.65)",fontWeight:700}}>{topVibe}</span>
+                </div>
+              ) : (
+                <div style={{fontSize:13,color:"rgba(255,255,255,0.4)",fontStyle:"italic"}}>Search a city above to start planning.</div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── 5. Community "Popular right now" ── */}
+      {friendActivity.filter(t => !user || t.user_id !== user.id).filter((t,_,arr)=>arr.findIndex(x=>x.city?.split(",")[0]===t.city?.split(",")[0])===arr.indexOf(t)).length > 0 && (
         <div style={{padding:"16px 0 0"}}>
-          <div style={{padding:"0 16px",fontSize:11,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",color:T.inkFaint,marginBottom:10}}>Friends planning</div>
+          <div style={{padding:"0 16px",marginBottom:10}}>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",color:T.inkFaint}}>Popular right now</div>
+            <div style={{fontSize:11,color:T.inkFaint,marginTop:2}}>See where other travelers are heading</div>
+          </div>
           <div style={{display:"flex",gap:10,overflowX:"auto",padding:"0 16px 4px"}}>
-            {friendActivity.filter(t => !user || t.user_id !== user.id).slice(0,6).map((trip,i)=>{
+            {friendActivity.filter(t => !user || t.user_id !== user.id).filter((t,_,arr)=>arr.findIndex(x=>x.city?.split(",")[0]===t.city?.split(",")[0])===arr.indexOf(t)).slice(0,6).map((trip,i)=>{
               const vibes = (trip.mood_context||"").split("\n").flatMap(l=>l.split(":")[1]?.split(",").map(v=>v.trim())||[]).filter(Boolean).slice(0,2);
+              const cityKey = trip.city?.split(",")[0]?.trim();
+              const photo = CITY_PHOTOS[cityKey];
               return (
-                <div key={i} style={{flexShrink:0,width:160,background:T.white,borderRadius:16,overflow:"hidden",border:`1px solid ${T.dust}`,boxShadow:"0 2px 8px rgba(28,22,18,0.05)"}}>
-                  <div style={{background:`linear-gradient(135deg,${T.ink},#2d1f10)`,padding:"12px 12px 10px"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                      <div style={{width:26,height:26,borderRadius:"50%",background:T.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"white",flexShrink:0}}>
+                <div key={i} style={{flexShrink:0,width:155,borderRadius:16,overflow:"hidden",boxShadow:"0 3px 12px rgba(28,22,18,0.15)",background:`linear-gradient(160deg,${T.ink},#2d1f10)`,position:"relative"}}>
+                  {photo && <img src={photo} alt={cityKey} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.35}} onError={e=>e.target.style.display="none"}/>}
+                  <div style={{position:"relative",zIndex:1,padding:"12px 12px 10px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:8}}>
+                      <div style={{width:24,height:24,borderRadius:"50%",background:T.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"white",flexShrink:0}}>
                         {trip.profiles?.name?.[0]||"?"}
                       </div>
-                      <div style={{fontSize:11,fontWeight:700,color:"white",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{trip.profiles?.name||"Wanderer"}</div>
+                      <div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.75)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{trip.profiles?.name||"Wanderer"}</div>
                     </div>
-                    <div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:"white",marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                      {trip.city?.split(",")[0]}
+                    <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,color:"white",marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {cityKey}
                     </div>
-                    <div style={{fontSize:10,color:"rgba(255,255,255,0.35)"}}>{trip.days?.length||0} {trip.days?.length===1?"day":"days"}</div>
+                    <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginBottom:vibes.length>0?8:0}}>{trip.days?.length||0} {trip.days?.length===1?"day":"days"}</div>
+                    {vibes.length > 0 && (
+                      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                        {vibes.map(v=>(
+                          <span key={v} style={{padding:"2px 7px",borderRadius:8,background:"rgba(255,255,255,0.12)",fontSize:10,fontWeight:600,color:"rgba(255,255,255,0.7)"}}>{v}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {vibes.length > 0 && (
-                    <div style={{padding:"8px 10px",display:"flex",flexWrap:"wrap",gap:4}}>
-                      {vibes.map(v=>(
-                        <span key={v} style={{padding:"2px 7px",borderRadius:8,background:T.paper,fontSize:10,fontWeight:600,color:T.inkLight}}>{v}</span>
-                      ))}
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -281,7 +394,35 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
         </div>
       )}
 
-      {/* Past trips */}
+      {/* ── 6. Destinations discovery grid — always visible ── */}
+      <div style={{padding:"20px 16px 0"}}>
+        <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",color:T.inkFaint,marginBottom:12}}>
+          Explore the world
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          {destCities.map(([c, photo]) => (
+            <div
+              key={c}
+              onClick={()=>{ setCity(c); setQuickPlan(c); }}
+              style={{height:130,borderRadius:16,overflow:"hidden",cursor:"pointer",background:T.ink,position:"relative",boxShadow:"0 3px 12px rgba(28,22,18,0.12)"}}>
+              <img
+                src={photo}
+                alt={c}
+                style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.6}}
+                onError={e=>e.target.style.display="none"}
+              />
+              <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,transparent 30%,rgba(0,0,0,0.72) 100%)"}}/>
+              <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"10px 12px"}}>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:"white",lineHeight:1.2,textShadow:"0 1px 6px rgba(0,0,0,0.5)"}}>
+                  {c}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 7. Past trips ── */}
       {pastTrips.length > 0 && (
         <div style={{padding:"16px 16px 0"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
@@ -289,19 +430,26 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
             {pastTrips.length > 3 && <button onClick={()=>onOpenTrip(null)} style={{background:"none",border:"none",fontSize:12,color:T.accent,fontWeight:700,cursor:"pointer",padding:0}}>See all →</button>}
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {pastTrips.slice(0,3).map((trip,i)=>(
-              <div key={i} onClick={()=>onOpenTrip(trip)}
-                style={{background:T.white,borderRadius:16,padding:"13px 16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",border:`1px solid ${T.dust}`}}>
-                <div style={{width:38,height:38,borderRadius:10,background:`linear-gradient(135deg,${T.ink},#2d1f10)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>
-                  {trip.emoji||"✦"}
+            {pastTrips.slice(0,3).map((trip,i)=>{
+              const cityKey = trip.city?.split(",")[0]?.trim();
+              const photo = CITY_PHOTOS[cityKey];
+              return (
+                <div key={i} onClick={()=>onOpenTrip(trip)}
+                  style={{background:T.white,borderRadius:16,display:"flex",alignItems:"stretch",cursor:"pointer",border:`1px solid ${T.dust}`,overflow:"hidden"}}>
+                  <div style={{width:56,flexShrink:0,background:T.ink,position:"relative",overflow:"hidden"}}>
+                    {photo && <img src={photo} alt={cityKey} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.7}} onError={e=>e.target.style.display="none"}/>}
+                    {!photo && <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,opacity:0.5}}>{trip.emoji||"✦"}</div>}
+                  </div>
+                  <div style={{flex:1,minWidth:0,padding:"12px 14px",display:"flex",alignItems:"center",gap:0}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:T.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cityKey}</div>
+                      <div style={{fontSize:11,color:T.inkFaint}}>{trip.dates||"No dates"}</div>
+                    </div>
+                    <div style={{fontSize:16,color:T.dust,flexShrink:0}}>›</div>
+                  </div>
                 </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:700,color:T.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{trip.city?.split(",")[0]}</div>
-                  <div style={{fontSize:11,color:T.inkFaint}}>{trip.dates||"No dates"}</div>
-                </div>
-                <div style={{fontSize:16,color:T.dust}}>›</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -310,55 +458,94 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
       {quickPlan && (
         <div style={{position:"fixed",inset:0,background:"rgba(28,22,18,0.6)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:"'DM Sans',sans-serif"}}
           onClick={()=>setQuickPlan(null)}>
-          <div onClick={e=>e.stopPropagation()} style={{background:T.white,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:480,padding:"24px 20px 40px",animation:"slideUp 0.3s ease"}}>
-            {/* Handle */}
-            <div style={{width:40,height:4,borderRadius:2,background:T.dust,margin:"0 auto 20px"}}/>
-            
-            {/* City name */}
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,color:T.ink,marginBottom:4}}>
-              {quickPlan.split(",")[0]}
+          <div onClick={e=>e.stopPropagation()} style={{background:T.white,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:480,maxHeight:"88vh",display:"flex",flexDirection:"column",animation:"slideUp 0.3s ease"}}>
+            {/* Scrollable content */}
+            <div style={{overflowY:"auto",flex:1,padding:"24px 20px 0"}}>
+              {/* Handle */}
+              <div style={{width:40,height:4,borderRadius:2,background:T.dust,margin:"0 auto 20px"}}/>
+
+              {/* City name */}
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,color:T.ink,marginBottom:4}}>
+                {quickPlan.split(",")[0]}
+              </div>
+              <div style={{fontSize:13,color:T.inkFaint,marginBottom:16}}>What's the vibe? Pick all that apply.</div>
+
+              {/* Vibe chips */}
+              <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
+                {QUICK_VIBES.map(v=>{
+                  const sel = quickVibes.includes(v.id);
+                  return (
+                    <button key={v.id}
+                      onClick={()=>setQuickVibes(prev=>sel?prev.filter(x=>x!==v.id):[...prev,v.id])}
+                      style={{padding:"8px 14px",borderRadius:20,background:sel?T.ink:T.paper,border:`1.5px solid ${sel?"transparent":T.dust}`,color:sel?T.white:T.ink,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all 0.15s"}}>
+                      <span>{v.emoji}</span> {v.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Dates — optional */}
+              <button onClick={()=>setShowQuickCal(v=>!v)}
+                style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1.5px solid ${dateString?T.accent:T.dust}`,background:T.paper,color:dateString?T.accent:T.inkFaint,fontSize:13,fontWeight:dateString?700:400,outline:"none",marginBottom:10,fontFamily:"'DM Sans',sans-serif",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:8,transition:"border-color 0.2s"}}>
+                <span style={{fontSize:15}}>📅</span>
+                {dateString || "Add dates (optional)"}
+                {dateString && <button onClick={e=>{e.stopPropagation();setStart(null);setEnd(null);setPicking(null);setShowQuickCal(false);}} style={{marginLeft:"auto",background:"none",border:"none",color:T.inkFaint,fontSize:16,cursor:"pointer",lineHeight:1}}>×</button>}
+              </button>
+
+              {showQuickCal && (
+                <div style={{background:T.cream,borderRadius:16,padding:"14px",marginBottom:10,border:`1px solid ${T.dust}`}}>
+                  {/* Month nav */}
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                    <button onClick={()=>setCalOffset(o=>Math.max(0,o-1))} style={{background:"none",border:"none",fontSize:18,color:T.inkLight,cursor:"pointer",padding:"0 4px",lineHeight:1}}>‹</button>
+                    <div style={{fontSize:13,fontWeight:700,color:T.ink}}>{cal.label}</div>
+                    <button onClick={()=>setCalOffset(o=>o+1)} style={{background:"none",border:"none",fontSize:18,color:T.inkLight,cursor:"pointer",padding:"0 4px",lineHeight:1}}>›</button>
+                  </div>
+                  {/* Day headers */}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:4}}>
+                    {["S","M","T","W","T","F","S"].map((d,i)=>(
+                      <div key={i} style={{textAlign:"center",fontSize:10,fontWeight:700,color:T.inkFaint,padding:"2px 0"}}>{d}</div>
+                    ))}
+                  </div>
+                  {/* Day grid */}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+                    {Array(cal.firstDay).fill(null).map((_,i)=><div key={`e${i}`}/>)}
+                    {Array(cal.daysInMonth).fill(null).map((_,i)=>{
+                      const d = i+1;
+                      const date = new Date(cal.year,cal.month,d);
+                      const isPast = date < today;
+                      const isStart = startDate && date.toDateString()===startDate.toDateString();
+                      const isEnd = endDate && date.toDateString()===endDate.toDateString();
+                      const range = inRange(d);
+                      return (
+                        <button key={d}
+                          onClick={()=>!isPast&&handleDay(d)}
+                          onMouseEnter={()=>setHoverDay(date)}
+                          onMouseLeave={()=>setHoverDay(null)}
+                          style={{aspectRatio:"1",padding:0,borderRadius:"50%",border:"none",fontSize:12,fontWeight:isStart||isEnd?700:400,cursor:isPast?"default":"pointer",background:isStart||isEnd?T.accent:range?"rgba(200,75,47,0.12)":"transparent",color:isPast?T.dust:isStart||isEnd?"white":T.ink,transition:"background 0.1s"}}>
+                          {d}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {dateString && (
+                    <div style={{textAlign:"center",fontSize:12,fontWeight:700,color:T.accent,marginTop:10}}>{dateString}</div>
+                  )}
+                </div>
+              )}
+              <div style={{height:16}}/>
             </div>
-            <div style={{fontSize:13,color:T.inkFaint,marginBottom:20}}>What's the vibe? Pick all that apply.</div>
 
-            {/* Vibe chips */}
-            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:20}}>
-              {QUICK_VIBES.map(v=>{
-                const sel = quickVibes.includes(v.id);
-                return (
-                  <button key={v.id}
-                    onClick={()=>setQuickVibes(prev=>sel?prev.filter(x=>x!==v.id):[...prev,v.id])}
-                    style={{padding:"8px 14px",borderRadius:20,background:sel?T.ink:T.paper,border:`1.5px solid ${sel?"transparent":T.dust}`,color:sel?T.white:T.ink,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all 0.15s"}}>
-                    <span>{v.emoji}</span> {v.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Dates — optional */}
-            <input
-              value={quickDates}
-              onChange={e=>setQuickDates(e.target.value)}
-              placeholder="Dates (optional) — e.g. Mar 18 – Mar 21, 2026"
-              style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1.5px solid ${T.dust}`,background:T.cream,color:T.ink,fontSize:13,outline:"none",marginBottom:16,fontFamily:"'DM Sans',sans-serif"}}/>
-
-            {/* Build button */}
-            <button onClick={handleQuickBuild}
-              style={{width:"100%",padding:"15px 0",borderRadius:16,background:`linear-gradient(135deg,${T.accent},#9b2020)`,border:"none",color:"white",fontSize:15,fontWeight:800,cursor:"pointer",boxShadow:"0 6px 20px rgba(200,75,47,0.3)"}}>
-              Build my trip ✦
-            </button>
-            <div style={{textAlign:"center",fontSize:11,color:T.inkFaint,marginTop:10}}>
-              {quickVibes.length === 0 ? "No vibes selected — we'll choose the best mix" : `${quickVibes.length} vibe${quickVibes.length>1?"s":""} selected`}
+            {/* Sticky CTA */}
+            <div style={{padding:"12px 20px 32px",borderTop:`1px solid ${T.dust}`,background:T.white,flexShrink:0}}>
+              <div style={{textAlign:"center",fontSize:11,color:T.inkFaint,marginBottom:10}}>
+                {quickVibes.length === 0 ? "No vibes selected — we'll choose the best mix" : `${quickVibes.length} vibe${quickVibes.length>1?"s":""} selected ✦`}
+              </div>
+              <button onClick={handleQuickBuild}
+                style={{width:"100%",padding:"15px 0",borderRadius:16,background:`linear-gradient(135deg,${T.accent},#9b2020)`,border:"none",color:"white",fontSize:15,fontWeight:800,cursor:"pointer",boxShadow:"0 6px 20px rgba(200,75,47,0.3)"}}>
+                Build my trip ✦
+              </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Empty state */}
-      {savedTrips.length === 0 && friendActivity.filter(t => !user || t.user_id !== user.id).length === 0 && (
-        <div style={{padding:"32px 20px",textAlign:"center"}}>
-          <div style={{fontSize:32,marginBottom:12}}>🌍</div>
-          <div style={{fontSize:15,fontWeight:700,color:T.ink,marginBottom:6}}>Your adventures start here</div>
-          <div style={{fontSize:13,color:T.inkFaint,lineHeight:1.6,maxWidth:260,margin:"0 auto"}}>Search a city above, set your vibe, and let AI plan your perfect trip.</div>
         </div>
       )}
     </div>

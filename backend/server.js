@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("dotenv").config({ override: true });
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -98,7 +98,7 @@ const checkHoursConflict = (timeStr, periods) => {
 
 // Single day endpoint — fast, called once per day
 app.post("/itinerary/day", async (req, res) => {
-  const { city, dates, dayNum, dayVibe, totalDays, travelProfile, usedPlaces = [] } = req.body;
+  const { city, dates, dayNum, dayVibe, totalDays, travelProfile, usedPlaces = [], homeBase } = req.body;
   if (!city || !dayNum) return res.status(400).json({ error: "city and dayNum required" });
 
   const usedPlacesContext = usedPlaces.length > 0
@@ -136,12 +136,15 @@ app.post("/itinerary/day", async (req, res) => {
   };
 
   const profileContext = buildProfileContext(travelProfile);
+  const homeBaseContext = homeBase
+    ? `\nThe traveller is staying at/near: ${homeBase}. Use this to optimize the route — ideally start the day close to their accommodation, then loop outward efficiently. Consider walking distance from their base for the first stop. Don't mention the hotel by name in the itinerary unless directly relevant.\n`
+    : "";
 
   const prompt = `You are an expert local travel curator — think of yourself as a well-traveled friend who lives in ${city} and knows every neighborhood intimately. You are NOT a generic travel guide. You give real, specific, opinionated recommendations.
 
 Plan Day ${dayNum} of ${totalDays} in ${city}.
 Trip dates: ${dates}
-Today's vibes: ${dayVibe || "open / flexible"}${profileContext}
+Today's vibes: ${dayVibe || "open / flexible"}${profileContext}${homeBaseContext}
 ${usedPlacesContext}
 
 VIBE GUIDE:
@@ -241,11 +244,13 @@ Add "highlight":true to the ONE slot that is the standout experience of the day 
       }
     });
 
-    // Return immediately without waiting for enrichment
-    res.json(parsed);
+    // Wait up to 4.5s for Foursquare photos, then respond either way
+    await Promise.race([
+      enrichWithPhotos(parsed.slots || [], city),
+      new Promise(r => setTimeout(r, 4500))
+    ]).catch(() => {});
 
-    // Enrich in background (non-blocking)
-    enrichWithPhotos(parsed.slots || [], city).catch(() => {});
+    res.json(parsed);
   } catch(e) {
     console.error("Day error:", e.response?.data || e.message);
     res.status(500).json({ error: e.response?.data?.error?.message || e.message });
@@ -264,7 +269,7 @@ app.post("/enrich", async (req, res) => {
       {
         headers: {
           "X-Goog-Api-Key": GOOGLE_KEY,
-          "X-Goog-FieldMask": "places.regularOpeningHours,places.displayName",
+          "X-Goog-FieldMask": "places.regularOpeningHours,places.displayName,places.photos",
           "Content-Type": "application/json"
         },
         timeout: 5000
@@ -274,6 +279,13 @@ app.post("/enrich", async (req, res) => {
     if (!gPlace) return res.json({ confidence: slot.confidence || "unverified" });
 
     const result = { confidence: "found" };
+
+    // Use Google photo if Foursquare didn't provide one
+    if (!slot.photo && gPlace.photos?.length) {
+      const p = gPlace.photos[0];
+      result.photo = `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${GOOGLE_KEY}`;
+    }
+
     if (gPlace.regularOpeningHours) {
       result.confidence = "verified";
       result.opening_hours = gPlace.regularOpeningHours.weekdayDescriptions || [];

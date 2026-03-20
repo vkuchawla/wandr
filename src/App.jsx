@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { OnboardingSplash } from "./OnboardingSplash.jsx";
 
-const BACKEND = "https://wandr-62i6.onrender.com";
+const BACKEND = import.meta.env.VITE_BACKEND || "https://wandr-62i6.onrender.com";
 
 // Keep Render backend warm — ping on load and every 14 minutes
 const pingBackend = () => fetch(`${BACKEND}/health`).catch(()=>{});
@@ -30,6 +30,7 @@ export default function App() {
   const [city, setCity]             = useState("");
   const [dates, setDates]           = useState("");
   const [moodContext, setMoodContext] = useState("");
+  const [homeBase, setHomeBase]     = useState("");
   const [savedTrips, setSavedTrips] = useState(() => {
     try { return JSON.parse(localStorage.getItem("wandr_trips") || "[]"); } catch(e) { return []; }
   });
@@ -39,7 +40,8 @@ export default function App() {
     try { localStorage.setItem("wandr_trips", JSON.stringify(savedTrips)); } catch(e) {}
   }, [savedTrips]);
   const [profile, setProfile]       = useState(null);
-  const [openTrip, setOpenTrip]     = useState(null);
+  const [openTrip, setOpenTrip]       = useState(null);
+  const [generatedDays, setGeneratedDays] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [user, setUser]             = useState(null);
   const [authGate, setAuthGate]     = useState(null); // null | "save" | "social"
@@ -150,9 +152,11 @@ export default function App() {
     // Not logged in — trip is saved locally, will sync when they sign in
   };
 
-  const handleStart = (c, d, mood) => {
+  const handleStart = (c, d, mood, hotel = "") => {
     setCity(c);
     setDates(d || "");
+    setHomeBase(hotel || "");
+    setGeneratedDays([]); // always clear cached days when starting a new trip
     if (mood !== undefined) {
       // Quick plan — has vibes already, skip CityPage and MoodBoard
       setMoodContext(mood);
@@ -161,7 +165,7 @@ export default function App() {
       setScreen("city");
     }
   };
-  const handleBuild = (ctx) => { setMoodContext(ctx); setScreen("itinerary"); };
+  const handleBuild = (ctx, hotel = "") => { setMoodContext(ctx); setHomeBase(hotel || ""); setGeneratedDays([]); setScreen("itinerary"); };
   const handleOpenTrip = (trip) => {
     if (!trip) { setScreen("saved"); return; }
     setOpenTrip(trip);
@@ -183,12 +187,12 @@ export default function App() {
         {screen==="home"        && <HomeScreen onStart={handleStart} savedTrips={savedTrips} profile={profile} onOpenTrip={handleOpenTrip} supabase={supabase} user={user} refreshKey={refreshKey}/>}
         {screen==="profile"     && !user && <SignInPrompt supabase={supabase}/>}
         {screen==="profile"     && user  && <ProfileScreen profile={profile} onSaveProfile={handleSaveProfile} supabase={supabase} savedTrips={savedTrips} onOpenTrip={handleOpenTrip}/>}
-        {screen==="explore"     && <ExploreScreen onSelectCity={(c)=>{setCity(c);setScreen("city");}} supabase={supabase} user={user}/>}
+        {screen==="explore"     && <ExploreScreen onSelectCity={(c)=>{setCity(c);setScreen("city");}} onStart={handleStart} supabase={supabase} user={user}/>}
         {screen==="social" && <SocialScreen supabase={supabase} user={user} onRemix={(trip)=>{ setCity(trip.city); setDates(trip.dates||""); setMoodContext(trip.mood_context||""); setScreen("mood"); }} onPlanCity={(c)=>{ setCity(c); setDates(""); setScreen("city"); }}/>}
         {screen==="city" && <CityPage city={city} dates={dates} supabase={supabase} user={user} onPlan={()=>setScreen("mood")} onRemix={(trip)=>{ setMoodContext(trip.mood_context||""); setScreen("mood"); }} onBack={()=>setScreen("home")} onSetDates={(d)=>setDates(d)}/>}
         {screen==="mood"        && <MoodBoard city={city} dates={dates} onBuild={handleBuild} onBack={()=>setScreen("city")} profile={profile} remixContext={moodContext}/>}
-        {screen==="itinerary"   && <ItineraryView city={city} dates={dates} moodContext={moodContext} profile={profile} onBack={()=>setScreen("mood")} onSave={handleSaveTrip} supabase={supabase} user={user}/>}
-        {screen==="saved"       && <SavedTripsScreen savedTrips={savedTrips} onOpenTrip={handleOpenTrip} onPlanNew={()=>setScreen("home")} onDeleteTrip={async (trip) => {
+        {screen==="itinerary"   && <ItineraryView city={city} dates={dates} moodContext={moodContext} homeBase={homeBase} profile={profile} onBack={()=>{ setMoodContext(""); setGeneratedDays([]); setScreen("mood"); }} onSave={handleSaveTrip} preloadedDays={generatedDays.length > 0 ? generatedDays : undefined} onDaysGenerated={setGeneratedDays} supabase={supabase} user={user}/>}
+        {screen==="saved"       && <SavedTripsScreen savedTrips={savedTrips} onOpenTrip={handleOpenTrip} onPlanNew={(c)=>{ setCity(c); setDates(""); setScreen("city"); }} onDeleteTrip={async (trip) => {
           // 1. Remove from local state immediately
           setSavedTrips(prev => prev.filter(t => !(t.city === trip.city && t.dates === trip.dates)));
           setRefreshKey(k => k + 1); // trigger home screen re-fetch
@@ -221,6 +225,17 @@ export default function App() {
         }}/>}
         {screen==="trip-detail" && openTrip && (
           <ItineraryView city={openTrip.city} dates={openTrip.dates} moodContext={openTrip.moodContext||openTrip.mood_context||""} preloadedDays={openTrip.days||[]} onBack={()=>setScreen("saved")} onSave={()=>{}} supabase={supabase} user={user}/>
+        )}
+        {/* Resume pill — shown when user navigated away from an active itinerary */}
+        {city && moodContext && !["itinerary","loading","splash","auth","onboarding"].includes(screen) && (
+          <div style={{position:"fixed",bottom:NAV_H+10,left:"50%",transform:"translateX(-50%)",zIndex:200,maxWidth:480,width:"100%",display:"flex",justifyContent:"center",pointerEvents:"none"}}>
+            <button onClick={()=>setScreen("itinerary")}
+              style={{pointerEvents:"auto",display:"flex",alignItems:"center",gap:8,padding:"10px 18px",borderRadius:99,background:T.ink,color:T.white,border:"none",boxShadow:"0 4px 20px rgba(28,22,18,0.35)",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontSize:13,fontWeight:700,whiteSpace:"nowrap"}}>
+              <span style={{fontSize:15}}>✦</span>
+              Resume: {city.split(",")[0]}
+              <span style={{fontSize:11,opacity:0.55,fontWeight:400}}>tap to return →</span>
+            </button>
+          </div>
         )}
         <NavBar screen={screen} setScreen={setScreen}/>
         {authGate && <AuthGateModal supabase={supabase} reason={authGate} onClose={()=>setAuthGate(null)}/>}

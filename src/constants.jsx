@@ -209,6 +209,43 @@ const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MONTHS_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 
+// ─────────────────────────────────────────────
+// CITY PHOTOS
+// ─────────────────────────────────────────────
+const CITY_PHOTOS = {
+  "New Orleans": "https://images.unsplash.com/photo-1571893544028-06b07af6dade?w=600&q=80",
+  "Tokyo":       "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=600&q=80",
+  "Barcelona":   "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=600&q=80",
+  "Nashville":   "https://images.unsplash.com/photo-1545579133-99bb5ab189bd?w=600&q=80",
+  "Lisbon":      "https://images.unsplash.com/photo-1558370781-d6196949e317?w=600&q=80",
+  "Miami":       "https://images.unsplash.com/photo-1533106497176-45ae19e68ba2?w=600&q=80",
+  "Paris":       "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=600&q=80",
+  "Mexico City": "https://images.unsplash.com/photo-1585464231875-d9ef1f5ad396?w=600&q=80",
+  "New York":    "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=600&q=80",
+  "Kyoto":       "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=600&q=80",
+  "Amsterdam":   "https://images.unsplash.com/photo-1512470876302-972faa2aa9a4?w=600&q=80",
+  "Buenos Aires":"https://images.unsplash.com/photo-1589909202802-8f4aadce1849?w=600&q=80",
+  "Cape Town":   "https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=600&q=80",
+  "Seoul":       "https://images.unsplash.com/photo-1601621915196-2621bfb0cd6e?w=600&q=80",
+  "London":      "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&q=80",
+  "Marrakech":   "https://images.unsplash.com/photo-1597212618440-806262de4f6b?w=600&q=80",
+  "Istanbul":    "https://images.unsplash.com/photo-1541432901042-2d8bd64b4a9b?w=600&q=80",
+  "Bali":        "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600&q=80",
+  "Bangkok":     "https://images.unsplash.com/photo-1563492065599-3520f775eeed?w=600&q=80",
+  "Copenhagen":  "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=600&q=80",
+  "Porto":       "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=600&q=80",
+  "Singapore":   "https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=600&q=80",
+  "Kansas City": "https://images.unsplash.com/photo-1617581629397-a72507c3de9e?w=600&q=80",
+  "Chicago":     "https://images.unsplash.com/photo-1494522855154-9297ac14b55f?w=600&q=80",
+  "Los Angeles": "https://images.unsplash.com/photo-1580655653885-65763b2597d0?w=600&q=80",
+  "San Francisco":"https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=600&q=80",
+  "Rome":        "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=600&q=80",
+  "Vienna":      "https://images.unsplash.com/photo-1516550135131-fe3dcdd41f15?w=600&q=80",
+  "Prague":      "https://images.unsplash.com/photo-1541849546-216549ae216d?w=600&q=80",
+  "Dubrovnik":   "https://images.unsplash.com/photo-1555990793-da11153b2473?w=600&q=80",
+  "Santorini":   "https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=600&q=80",
+};
+
 const TRANSIT_ICONS = { walk:"🚶", subway:"🚇", taxi:"🚕", uber:"U", lyft:"L", bus:"🚌", tram:"🚊", "tuk-tuk":"🛺", ferry:"🚢", bike:"🚲", drive:"🚗" };
 const TRANSIT_COLORS = { walk:"#4a7c59", subway:"#1e6b8a", taxi:"#c49a3c", uber:"#000000", lyft:"#ea0083", bus:"#5a2d82", tram:"#255c3f", "tuk-tuk":"#b5600a", ferry:"#1a3a6b", bike:"#4a7c59", drive:"#555" };
 const VIBE_COLORS_MAP = { "slow-morning":"#a0522d","splurge-dinner":"#8b1a2f","street-food":"#b5600a","nightlife":"#2d2060","day-trip":"#255c3f","adventurous":"#9b2020","chill-afternoon":"#1e6b8a","local-weird":"#5a2d82","cultural":"#4a3a10","sports":"#1a5c30","golden-hour":"#b06000","spa-day":"#4a7c59","coffee-crawl":"#5c3d1e","brunch":"#8b4513","nature":"#2d5a1b","shopping":"#8b1a6b","art":"#1a3a6b","music":"#5a1a6b" };
@@ -221,5 +258,5 @@ const TRAVEL_DNAS = {
   balanced:       { label:"The Balanced Traveller", emoji:"⚡", color:"#7a5c2a", bg:"linear-gradient(135deg,#1a1200,#3d2d00)", description:"You want it all — culture, food, relaxation, adventure — in perfect proportion. You're the one who finds the best compromise.", traits:["Versatile","Thoughtful","Social","Grounded"] }
 };
 
-export { BTN_PRIMARY, BTN_SECONDARY, CARD, DAYS, EXPLORE_CITIES, FONTS, GLOBAL_CSS, MONTHS_FULL, MONTHS_SHORT, NAV_H, ONBOARDING_QUESTIONS, QUIZ_QUESTIONS, SECTION_LABEL, T, TRANSIT_COLORS, TRANSIT_ICONS, TRAVEL_DNAS, VIBES, VIBE_CATEGORIES, VIBE_COLORS_MAP };
+export { BTN_PRIMARY, BTN_SECONDARY, CARD, CITY_PHOTOS, DAYS, EXPLORE_CITIES, FONTS, GLOBAL_CSS, MONTHS_FULL, MONTHS_SHORT, NAV_H, ONBOARDING_QUESTIONS, QUIZ_QUESTIONS, SECTION_LABEL, T, TRANSIT_COLORS, TRANSIT_ICONS, TRAVEL_DNAS, VIBES, VIBE_CATEGORIES, VIBE_COLORS_MAP };
 ;;
