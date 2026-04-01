@@ -2,14 +2,14 @@ import { useState, useMemo } from "react";
 import { T, GLOBAL_CSS, NAV_H, CITY_PHOTOS } from "./constants.jsx";
 
 const MOODS = [
-  { id:"chill",     emoji:"🌊", label:"Chill out"  },
-  { id:"adventure", emoji:"⚡", label:"Adventure"  },
-  { id:"food",      emoji:"🍜", label:"Foodie"     },
-  { id:"culture",   emoji:"🏛", label:"Culture"    },
-  { id:"nightlife", emoji:"🎉", label:"Nightlife"  },
-  { id:"romantic",  emoji:"💑", label:"Romantic"   },
-  { id:"nature",    emoji:"🌿", label:"Nature"     },
-  { id:"offbeat",   emoji:"🗺", label:"Offbeat"    },
+  { id:"chill",     emoji:"🌊", label:"Chill out",  color:"#3b82f6", bg:"rgba(59,130,246,0.1)"  },
+  { id:"adventure", emoji:"⚡", label:"Adventure",  color:"#f59e0b", bg:"rgba(245,158,11,0.1)"  },
+  { id:"food",      emoji:"🍜", label:"Foodie",     color:"#ef4444", bg:"rgba(239,68,68,0.1)"   },
+  { id:"culture",   emoji:"🏛", label:"Culture",    color:"#8b5cf6", bg:"rgba(139,92,246,0.1)"  },
+  { id:"nightlife", emoji:"🎉", label:"Nightlife",  color:"#ec4899", bg:"rgba(236,72,153,0.1)"  },
+  { id:"romantic",  emoji:"💑", label:"Romantic",   color:"#f43f5e", bg:"rgba(244,63,94,0.1)"   },
+  { id:"nature",    emoji:"🌿", label:"Nature",     color:"#22c55e", bg:"rgba(34,197,94,0.1)"   },
+  { id:"offbeat",   emoji:"🗺", label:"Offbeat",    color:"#f97316", bg:"rgba(249,115,22,0.1)"  },
 ];
 
 const MOOD_TO_VIBES = {
@@ -74,7 +74,7 @@ function CityCard({ city, selectedMoods, onOpen, compact }) {
         <div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,0.8) 0%,transparent 55%)"}}/>
         <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"10px 11px"}}>
           <div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:"white",lineHeight:1.2}}>{city.name}</div>
-          <div style={{fontSize:10,color:"rgba(255,255,255,0.45)"}}>{city.country}</div>
+          <div style={{fontSize:9,color:"rgba(255,255,255,0.5)",lineHeight:1.3,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{city.tagline}</div>
         </div>
       </div>
     );
@@ -178,12 +178,12 @@ function ExploreScreen({ onSelectCity, onStart }) {
             return (
               <button key={mood.id} onClick={()=>toggleMood(mood.id)}
                 style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,padding:"12px 4px",borderRadius:14,
-                  border:"1.5px solid " + (sel ? "#1c1612" : "#e8dcd0"),
-                  background:sel ? "#1c1612" : "white",
+                  border:`1.5px solid ${sel ? mood.color : "#e8dcd0"}`,
+                  background:sel ? mood.bg : "white",
                   cursor:"pointer",transition:"all 0.15s",
-                  boxShadow:sel ? "0 2px 8px rgba(28,22,18,0.15)" : "none"}}>
-                <span style={{fontSize:20,lineHeight:1}}>{mood.emoji}</span>
-                <span style={{fontSize:10,fontWeight:700,color:sel?"white":"#a89880",lineHeight:1,textAlign:"center"}}>{mood.label}</span>
+                  boxShadow:sel ? `0 2px 12px ${mood.color}30` : "none"}}>
+                <span style={{fontSize:22,lineHeight:1}}>{mood.emoji}</span>
+                <span style={{fontSize:10,fontWeight:700,color:sel ? mood.color : "#a89880",lineHeight:1,textAlign:"center"}}>{mood.label}</span>
               </button>
             );
           })}

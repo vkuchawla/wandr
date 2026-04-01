@@ -127,7 +127,17 @@ export default function App() {
     // First sync any local-only trips
     await syncLocalTrips(userId);
     const { data } = await supabase.from("trips").select("*").eq("user_id", userId).order("saved_at", { ascending: false });
-    if (data) setSavedTrips(data.map(t => ({ ...t, days: t.days, moodContext: t.mood_context })));
+    if (data) {
+      // Deduplicate by city+dates — keep the most recent (already sorted newest-first)
+      const seen = new Set();
+      const deduped = data.filter(t => {
+        const key = `${t.city}|${t.dates || ""}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setSavedTrips(deduped.map(t => ({ ...t, days: t.days, moodContext: t.mood_context })));
+    }
   };
 
   const handleSaveProfile = async (p) => {
@@ -149,9 +159,16 @@ export default function App() {
     const localTrip = { ...trip, saved_at: new Date().toISOString() };
     setSavedTrips(prev => [localTrip, ...prev.filter(t => !(t.city === trip.city && t.dates === trip.dates))]);
 
-    // If logged in, also save to Supabase
+    // If logged in, also save to Supabase — update existing row if city+dates match, else insert
     if (user) {
-      await supabase.from("trips").upsert({
+      const { data: existing } = await supabase.from("trips")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("city", trip.city)
+        .eq("dates", trip.dates || "")
+        .maybeSingle();
+
+      const payload = {
         user_id: user.id,
         city: trip.city,
         dates: trip.dates,
@@ -160,7 +177,13 @@ export default function App() {
         emoji: trip.emoji || "✦",
         saved_at: new Date().toISOString(),
         is_public: true
-      });
+      };
+
+      if (existing?.id) {
+        await supabase.from("trips").update(payload).eq("id", existing.id);
+      } else {
+        await supabase.from("trips").insert(payload);
+      }
     }
     // Not logged in — trip is saved locally, will sync when they sign in
   };
@@ -171,9 +194,9 @@ export default function App() {
     setHomeBase(hotel || "");
     setGeneratedDays([]); // always clear cached days when starting a new trip
     if (mood !== undefined) {
-      // Quick plan — has vibes already, skip CityPage and MoodBoard
+      // Fast lane — mood explicitly provided (even if empty = AI decides), skip MoodBoard
       setMoodContext(mood);
-      setScreen(mood ? "itinerary" : "mood");
+      setScreen("itinerary");
     } else {
       setScreen("city");
     }
@@ -202,7 +225,7 @@ export default function App() {
         {screen==="profile"     && user  && <ProfileScreen profile={profile} onSaveProfile={handleSaveProfile} supabase={supabase} savedTrips={savedTrips} onOpenTrip={handleOpenTrip}/>}
         {screen==="explore"     && <ExploreScreen onSelectCity={(c)=>{setCity(c);setScreen("city");}} onStart={handleStart} supabase={supabase} user={user}/>}
         {screen==="social" && <SocialScreen supabase={supabase} user={user} onRemix={(trip)=>{ setCity(trip.city); setDates(trip.dates||""); setMoodContext(trip.mood_context||""); setScreen("mood"); }} onPlanCity={(c)=>{ setCity(c); setDates(""); setScreen("city"); }}/>}
-        {screen==="city" && <CityPage city={city} dates={dates} supabase={supabase} user={user} onPlan={()=>setScreen("mood")} onRemix={(trip)=>{ setMoodContext(trip.mood_context||""); setScreen("mood"); }} onBack={()=>setScreen("home")} onSetDates={(d)=>setDates(d)}/>}
+        {screen==="city" && <CityPage city={city} dates={dates} supabase={supabase} user={user} onPlan={()=>setScreen("mood")} onSkipMood={(hotel="")=>{ setHomeBase(hotel||""); setMoodContext(""); setGeneratedDays([]); setScreen("itinerary"); }} onRemix={(trip)=>{ setMoodContext(trip.mood_context||""); setScreen("mood"); }} onBack={()=>setScreen("home")} onSetDates={(d)=>setDates(d)}/>}
         {screen==="mood"        && <MoodBoard city={city} dates={dates} onBuild={handleBuild} onBack={()=>setScreen("city")} profile={profile} remixContext={moodContext}/>}
         {screen==="itinerary"   && <ItineraryView city={city} dates={dates} moodContext={moodContext} homeBase={homeBase} profile={profile} onBack={()=>{ setMoodContext(""); setGeneratedDays([]); setScreen("mood"); }} onSave={handleSaveTrip} preloadedDays={generatedDays.length > 0 ? generatedDays : undefined} onDaysGenerated={setGeneratedDays} supabase={supabase} user={user}/>}
         {screen==="saved"       && <SavedTripsScreen savedTrips={savedTrips} onOpenTrip={handleOpenTrip} onPlanNew={(c)=>{ setCity(c); setDates(""); setScreen("city"); }} onDeleteTrip={async (trip) => {

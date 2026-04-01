@@ -56,6 +56,12 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
   const [quickPlan, setQuickPlan] = useState(null); // {city} when quick plan sheet is open
   const [quickVibes, setQuickVibes] = useState([]);
   const [showQuickCal, setShowQuickCal] = useState(false);
+  const [quickHomeBase, setQuickHomeBase] = useState("");
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [hotelSuggestions, setHotelSuggestions] = useState([]);
+  const [showHotelSuggestions, setShowHotelSuggestions] = useState(false);
+  const [hotelSuggestionsLoading, setHotelSuggestionsLoading] = useState(false);
+  const hotelTimer = useRef(null);
   const QUICK_VIBES = [
     { id:"slow-morning", emoji:"☕", label:"Slow mornings" },
     { id:"street-food", emoji:"🍜", label:"Street food" },
@@ -74,14 +80,56 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
   }, []);
   const [heroCity, heroCityPhoto] = heroCityEntry;
 
+  const handleHotelChange = (val) => {
+    setQuickHomeBase(val);
+    clearTimeout(hotelTimer.current);
+    if (!val || val.length < 2) { setHotelSuggestions([]); setShowHotelSuggestions(false); return; }
+    setHotelSuggestionsLoading(true);
+    hotelTimer.current = setTimeout(async () => {
+      try {
+        const cityParam = quickPlan ? `&city=${encodeURIComponent(quickPlan)}` : "";
+        const res = await fetch(`${BACKEND}/hotel-autocomplete?q=${encodeURIComponent(val)}${cityParam}`);
+        const data = await res.json();
+        setHotelSuggestions(data.suggestions || []);
+        setShowHotelSuggestions(true);
+      } catch { setHotelSuggestions([]); }
+      finally { setHotelSuggestionsLoading(false); }
+    }, 300);
+  };
+
+  const selectHotel = (s) => {
+    const full = s.description ? `${s.name}, ${s.description}` : s.name;
+    setQuickHomeBase(full);
+    setHotelSuggestions([]);
+    setShowHotelSuggestions(false);
+  };
+
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) return;
+    setLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await fetch(`${BACKEND}/reverse-geocode?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}`);
+          const data = await res.json();
+          if (data.address) setQuickHomeBase(data.address);
+        } catch {}
+        setLocationLoading(false);
+      },
+      () => setLocationLoading(false),
+      { timeout: 10000 }
+    );
+  };
+
   const handleQuickBuild = () => {
     if (!quickPlan) return;
     const moodCtx = quickVibes.length > 0
       ? `Day 1: ${quickVibes.map(v => QUICK_VIBES.find(q=>q.id===v)?.label||v).join(", ")}`
       : "";
-    onStart(quickPlan, dateString, moodCtx, "");
+    onStart(quickPlan, dateString, moodCtx, quickHomeBase.trim());
     setQuickPlan(null);
     setQuickVibes([]);
+    setQuickHomeBase("");
     setStart(null); setEnd(null); setPicking(null);
     setShowQuickCal(false);
   };
@@ -188,49 +236,51 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
       <style>{GLOBAL_CSS}</style>
 
       {/* ── 1. Full-bleed hero photo header ── */}
-      <div style={{position:"relative",height:220,overflow:"hidden",background:T.ink}}>
-        {/* Hero city photo */}
+      <div style={{position:"relative",height:260,overflow:"hidden",background:T.ink}}>
+        {/* Fixed warm aerial travel photo — dark tones work with any city overlay */}
         <img
-          src={heroCityPhoto}
-          alt={heroCity}
-          style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}
-          onError={e=>e.target.style.display="none"}
+          src="https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&q=80"
+          alt="Travel"
+          style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",objectPosition:"center 40%"}}
         />
-        {/* Gradient overlay */}
-        <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.7) 100%)"}}/>
-        {/* Radial gold glow */}
-        <div style={{position:"absolute",inset:0,backgroundImage:"radial-gradient(circle at 20% 50%,rgba(196,154,60,0.12) 0%,transparent 60%)",pointerEvents:"none"}}/>
+        {/* Multi-stop gradient: light at top → dark in middle → pure ink at bottom */}
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.45) 45%, rgba(28,22,18,0.88) 75%, rgba(28,22,18,1) 100%)"}}/>
+        {/* Subtle warm gold tint */}
+        <div style={{position:"absolute",inset:0,backgroundImage:"radial-gradient(circle at 30% 40%,rgba(196,154,60,0.1) 0%,transparent 65%)",pointerEvents:"none"}}/>
 
         {/* Top-left greeting */}
         <div style={{position:"absolute",top:52,left:20,right:20,zIndex:2}}>
           {firstName ? (
-            <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.75)",letterSpacing:"0.02em"}}>
+            <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.8)",letterSpacing:"0.02em"}}>
               {timeGreeting}, {firstName} ✦
             </div>
           ) : (
-            <div style={{fontSize:13,fontWeight:700,color:"rgba(255,255,255,0.75)",letterSpacing:"0.14em",textTransform:"uppercase"}}>
-              ✦ WANDR
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:"rgba(255,255,255,0.8)",letterSpacing:"0.14em",textTransform:"uppercase",marginBottom:4}}>
+                ✦ WANDR
+              </div>
+              <div style={{fontSize:12,color:"rgba(255,255,255,0.5)",fontStyle:"italic",fontFamily:"'Playfair Display',serif"}}>
+                AI-built itineraries for your travel style.
+              </div>
             </div>
           )}
         </div>
 
-        {/* Bottom: city name + CTA */}
-        <div style={{position:"absolute",bottom:20,left:20,right:20,zIndex:2,display:"flex",alignItems:"flex-end",justifyContent:"space-between"}}>
-          <div>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:900,color:"white",lineHeight:1.1,textShadow:"0 2px 12px rgba(0,0,0,0.4)"}}>
-              {heroCity}
-            </div>
+        {/* City name + CTA — positioned high enough to stay above the dark fade zone */}
+        <div style={{position:"absolute",bottom:76,left:20,right:20,zIndex:2,display:"flex",alignItems:"flex-end",justifyContent:"space-between"}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:900,color:"white",lineHeight:1.1,textShadow:"0 2px 16px rgba(0,0,0,0.5)"}}>
+            {heroCity}
           </div>
           <button
             onClick={()=>setQuickPlan(heroCity)}
-            style={{flexShrink:0,padding:"9px 16px",borderRadius:20,background:T.accent,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 14px rgba(200,75,47,0.45)",whiteSpace:"nowrap",marginLeft:12}}>
+            style={{flexShrink:0,padding:"9px 16px",borderRadius:20,background:T.accent,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 14px rgba(200,75,47,0.5)",whiteSpace:"nowrap",marginLeft:12}}>
             Plan this trip →
           </button>
         </div>
       </div>
 
-      {/* ── 2. Search bar — overlaps hero ── */}
-      <div style={{margin:"0 16px",position:"relative",zIndex:10,marginTop:-28}}>
+      {/* ── 2. Search bar — floats over the pure-dark gradient zone, no photo clash ── */}
+      <div style={{margin:"0 16px",position:"relative",zIndex:10,marginTop:-52}}>
         <div style={{background:T.white,borderRadius:20,padding:"16px",boxShadow:"0 4px 20px rgba(28,22,18,0.12)"}}>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <div style={{flex:1,position:"relative"}}>
@@ -276,11 +326,11 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
       )}
 
       {/* ── 3. Quick mood row ── */}
-      <div style={{padding:"16px 16px 0"}}>
-        <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:T.inkFaint,marginBottom:10}}>
+      <div style={{padding:"16px 0 0"}}>
+        <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:T.inkFaint,marginBottom:10,paddingLeft:16}}>
           What's the vibe?
         </div>
-        <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
+        <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,paddingLeft:16,paddingRight:24,scrollbarWidth:"none",msOverflowStyle:"none"}}>
           {QUICK_VIBES.map(v => (
             <button
               key={v.id}
@@ -539,7 +589,53 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
                   )}
                 </div>
               )}
-              <div style={{height:16}}/>
+              {/* Hotel / Location input */}
+              <div style={{marginBottom:16,position:"relative"}}>
+                <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:T.inkFaint,marginBottom:8}}>Where are you staying?</div>
+                <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",borderRadius:14,border:`1.5px solid ${quickHomeBase ? T.sage : T.dust}`,background:T.paper,transition:"border-color 0.2s"}}>
+                  <span style={{fontSize:14,flexShrink:0}}>🏨</span>
+                  <input
+                    value={quickHomeBase}
+                    onChange={e=>handleHotelChange(e.target.value)}
+                    onFocus={()=>hotelSuggestions.length>0&&setShowHotelSuggestions(true)}
+                    onBlur={()=>setTimeout(()=>setShowHotelSuggestions(false),150)}
+                    placeholder="Hotel name or address (optional)"
+                    style={{flex:1,border:"none",background:"transparent",color:quickHomeBase?T.ink:T.inkFaint,fontSize:13,fontWeight:quickHomeBase?600:400,outline:"none",fontFamily:"'DM Sans',sans-serif"}}/>
+                  <button
+                    onClick={handleDetectLocation}
+                    title="Use my current location"
+                    style={{flexShrink:0,background:"none",border:"none",padding:"4px 6px",cursor:"pointer",fontSize:18,lineHeight:1,color:T.inkFaint,transition:"color 0.15s",opacity:locationLoading?0.4:1}}>
+                    {locationLoading ? "…" : "🔍"}
+                  </button>
+                  {quickHomeBase && (
+                    <button onClick={()=>{setQuickHomeBase("");setHotelSuggestions([]);}} style={{flexShrink:0,background:"none",border:"none",cursor:"pointer",color:T.inkFaint,fontSize:18,lineHeight:1,padding:0}}>×</button>
+                  )}
+                </div>
+                {/* Hotel suggestions dropdown */}
+                {(showHotelSuggestions && hotelSuggestions.length > 0) || hotelSuggestionsLoading ? (
+                  <div style={{position:"absolute",top:"calc(100% - 4px)",left:0,right:0,background:T.white,borderRadius:12,boxShadow:"0 8px 24px rgba(28,22,18,0.12)",border:`1px solid ${T.dust}`,zIndex:60,overflow:"hidden"}}>
+                    {hotelSuggestionsLoading && hotelSuggestions.length === 0 && (
+                      <div style={{padding:"12px 14px",fontSize:13,color:T.inkFaint}}>Searching hotels…</div>
+                    )}
+                    {hotelSuggestions.map((s,i)=>(
+                      <button key={i} onMouseDown={()=>selectHotel(s)}
+                        style={{width:"100%",padding:"10px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:10,borderBottom:i<hotelSuggestions.length-1?`1px solid ${T.dust}`:"none"}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.paper}
+                        onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                        <span style={{fontSize:14,flexShrink:0}}>🏨</span>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:700,color:T.ink}}>{s.name}</div>
+                          {s.description&&<div style={{fontSize:11,color:T.inkFaint}}>{s.description}</div>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {locationLoading && <div style={{fontSize:11,color:T.inkFaint,marginTop:5}}>Finding your location…</div>}
+                {quickHomeBase && !locationLoading && !showHotelSuggestions && <div style={{fontSize:11,color:T.sage,fontWeight:600,marginTop:5}}>✓ Day routes from {quickHomeBase.split(",")[0]}</div>}
+              </div>
+
+              <div style={{height:4}}/>
             </div>
 
             {/* Sticky CTA */}

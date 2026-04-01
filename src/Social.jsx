@@ -257,6 +257,20 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
   const [loading, setLoading]   = useState(true);
 
   useEffect(() => { loadData(); }, []);
+
+  // Clear all personal data immediately when user signs out
+  useEffect(() => {
+    if (!user) {
+      setFeed([]);
+      setDiscover([]);
+      setFollowing([]);
+      setFollowingList([]);
+      setFollowers([]);
+      setPlaceRatings([]);
+      setLoading(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     const onFocus = () => loadData();
     const onRating = () => loadData();
@@ -307,24 +321,25 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
     } else {
       setDiscover([]);
     }
-    setLoading(false);
+    if (user) {
+      const { data: ratingsData } = await supabase
+        .from("place_ratings")
+        .select("*")
+        .eq("is_public", true)
+        .order("rated_at", { ascending: false })
+        .limit(40);
 
-    const { data: ratingsData } = await supabase
-      .from("place_ratings")
-      .select("*")
-      .eq("is_public", true)
-      .order("rated_at", { ascending: false })
-      .limit(40);
-
-    if (ratingsData?.length) {
-      const userIds = [...new Set(ratingsData.map(r => r.user_id))];
-      const { data: ratingProfiles } = await supabase
-        .from("profiles").select("id, name, travel_dna").in("id", userIds);
-      const profileMap = Object.fromEntries((ratingProfiles||[]).map(p => [p.id, p]));
-      setPlaceRatings(ratingsData.map(r => ({ ...r, profiles: profileMap[r.user_id] || null })));
-    } else {
-      setPlaceRatings([]);
+      if (ratingsData?.length) {
+        const userIds = [...new Set(ratingsData.map(r => r.user_id))];
+        const { data: ratingProfiles } = await supabase
+          .from("profiles").select("id, name, travel_dna").in("id", userIds);
+        const profileMap = Object.fromEntries((ratingProfiles||[]).map(p => [p.id, p]));
+        setPlaceRatings(ratingsData.map(r => ({ ...r, profiles: profileMap[r.user_id] || null })));
+      } else {
+        setPlaceRatings([]);
+      }
     }
+    setLoading(false);
   };
 
   const followUser = async (userId) => {

@@ -11,6 +11,10 @@ app.use((req, res, next) => { res.header("Access-Control-Allow-Origin", "*"); ne
 app.use(express.json());
 
 app.get("/health", (_, res) => res.json({ ok: true }));
+app.get("/debug-key", (_, res) => {
+  const k = process.env.ANTHROPIC_API_KEY || "";
+  res.json({ prefix: k.slice(0, 20), suffix: k.slice(-6), length: k.length });
+});
 
 const KEY = process.env.ANTHROPIC_API_KEY;
 const FSQ_KEY = process.env.FSQ_API_KEY;
@@ -332,6 +336,46 @@ app.get("/autocomplete", async (req, res) => {
     res.json({ suggestions });
   } catch(e) {
     console.error("Autocomplete error:", e.response?.data || e.message);
+    res.json({ suggestions: [] });
+  }
+});
+
+// Hotel / lodging autocomplete
+app.get("/hotel-autocomplete", async (req, res) => {
+  const { q, city } = req.query;
+  if (!q || q.length < 2) return res.json({ suggestions: [] });
+
+  // Include city in the query string for context so Google biases results correctly
+  const input = city ? `${q} near ${city}` : q;
+
+  try {
+    const response = await axios.post(
+      "https://places.googleapis.com/v1/places:autocomplete",
+      {
+        input,
+        includedPrimaryTypes: ["lodging"],
+        languageCode: "en"
+      },
+      {
+        headers: {
+          "X-Goog-Api-Key": GOOGLE_KEY,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    const suggestions = (response.data?.suggestions || [])
+      .slice(0, 6)
+      .map(s => ({
+        name: s.placePrediction?.structuredFormat?.mainText?.text || s.placePrediction?.text?.text || "",
+        description: s.placePrediction?.structuredFormat?.secondaryText?.text || "",
+        placeId: s.placePrediction?.placeId || ""
+      }))
+      .filter(s => s.name);
+
+    res.json({ suggestions });
+  } catch(e) {
+    console.error("Hotel autocomplete error:", e.response?.data || e.message);
     res.json({ suggestions: [] });
   }
 });

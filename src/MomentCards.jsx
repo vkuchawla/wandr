@@ -1,6 +1,32 @@
 import { useState, useRef, useEffect } from "react";
-import { NAV_H, T, TRANSIT_COLORS, TRANSIT_ICONS } from "./constants.jsx";
-function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, setSelectedPlace, BUCKET_COLORS, getBucket, TRANSIT_ICONS, TRANSIT_COLORS, onUpdateSlots }) {
+import { NAV_H, T, TRANSIT_COLORS, TRANSIT_ICONS, CITY_PHOTOS } from "./constants.jsx";
+
+// Category → atmospheric Unsplash photo
+const CATEGORY_PHOTOS = {
+  "food":       "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80",
+  "restaurant": "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80",
+  "cafe":       "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&q=80",
+  "coffee":     "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&q=80",
+  "bar":        "https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=800&q=80",
+  "nightlife":  "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&q=80",
+  "club":       "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&q=80",
+  "museum":     "https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=800&q=80",
+  "art":        "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=800&q=80",
+  "park":       "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=80",
+  "nature":     "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80",
+  "beach":      "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=80",
+  "market":     "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&q=80",
+  "shopping":   "https://images.unsplash.com/photo-1481437156560-3205f6a55735?w=800&q=80",
+  "hotel":      "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&q=80",
+  "spa":        "https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&q=80",
+  "temple":     "https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=800&q=80",
+  "church":     "https://images.unsplash.com/photo-1519734777837-3f986da12fe4?w=800&q=80",
+  "landmark":   "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=800&q=80",
+  "view":       "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&q=80",
+  "viewpoint":  "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&q=80",
+};
+
+function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, setSelectedPlace, BUCKET_COLORS, getBucket, TRANSIT_ICONS, TRANSIT_COLORS, city, onUpdateSlots }) {
   const [activeSlotIdx, setActiveSlotIdx] = useState(0);
   const [editingTime, setEditingTime] = useState(false);
   const [timeInput, setTimeInput] = useState("");
@@ -143,49 +169,65 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
             </div>
           </div>
         ) : (
-          // No photo — rich time-of-day gradient hero
+          // No place photo — use category or city photo as atmospheric background
           <div style={{
             position:"relative",
-            height:240,
+            height:260,
             flexShrink:0,
             background: isCompleted ? "#e8e8e8" : cardBg,
             overflow:"hidden",
           }}>
+            {/* Background photo — category-matched or city fallback */}
+            {(() => {
+              const cat = (slot.category||"").toLowerCase();
+              const bgPhoto = CATEGORY_PHOTOS[cat] ||
+                Object.entries(CATEGORY_PHOTOS).find(([k]) => cat.includes(k))?.[1] ||
+                CITY_PHOTOS[city?.split(",")[0]?.trim()];
+              return bgPhoto ? (
+                <img
+                  src={bgPhoto}
+                  alt=""
+                  style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:isCompleted?0.08:0.32}}
+                />
+              ) : null;
+            })()}
+
+            {/* Dark gradient overlay for readability */}
+            <div style={{position:"absolute",inset:0,background:
+              isCompleted ? "rgba(240,240,240,0.9)" :
+              "linear-gradient(160deg,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.25) 50%,rgba(0,0,0,0.7) 100%)"
+            }}/>
+
             {/* Decorative ambient glow */}
             <div style={{position:"absolute",top:-40,right:-40,width:200,height:200,borderRadius:"50%",background:
-              bucket==="morning"?"rgba(196,154,60,0.15)":
-              bucket==="afternoon"?"rgba(74,124,89,0.15)":
-              "rgba(139,26,111,0.15)",
-              filter:"blur(40px)"}}/>
-            <div style={{position:"absolute",bottom:-60,left:-40,width:160,height:160,borderRadius:"50%",background:
-              bucket==="morning"?"rgba(200,75,47,0.1)":
-              bucket==="afternoon"?"rgba(196,154,60,0.1)":
-              "rgba(45,32,96,0.2)",
-              filter:"blur(50px)"}}/>
+              bucket==="morning"?"rgba(196,154,60,0.2)":
+              bucket==="afternoon"?"rgba(74,124,89,0.2)":
+              "rgba(139,26,111,0.2)",
+              filter:"blur(40px)",pointerEvents:"none"}}/>
 
             {/* Top bar — full width, space between */}
             <div style={{position:"absolute",top:0,left:0,right:0,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={e=>e.stopPropagation()}>
               {/* Left — bucket label */}
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:18}}>{bucket==="morning"?"🌅":bucket==="afternoon"?"☀️":"🌙"}</span>
-                <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:"0.12em"}}>
+                <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.55)",textTransform:"uppercase",letterSpacing:"0.12em"}}>
                   {bucket==="morning"?"Morning":bucket==="afternoon"?"Afternoon":"Evening"}
                 </span>
               </div>
               {/* Right — time + badges */}
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 {slot.highlight&&<span style={{background:T.gold,color:"white",fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:12}}>★ Must-do</span>}
-                {slot.price&&<span style={{background:"rgba(255,255,255,0.12)",color:"rgba(255,255,255,0.8)",fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:12}}>{slot.price}</span>}
-                <button onClick={openTimeEdit} style={{background:"rgba(255,255,255,0.1)",backdropFilter:"blur(8px)",border:"1px dashed rgba(255,255,255,0.3)",color:"white",fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:16,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+                {slot.price&&<span style={{background:"rgba(0,0,0,0.4)",backdropFilter:"blur(8px)",color:"rgba(255,255,255,0.9)",fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:12}}>{slot.price}</span>}
+                <button onClick={openTimeEdit} style={{background:"rgba(0,0,0,0.4)",backdropFilter:"blur(8px)",border:"1px dashed rgba(255,255,255,0.4)",color:"white",fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:16,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
                   <span>🕐</span><span>{slot.time}</span><span style={{fontSize:8,opacity:0.5}}>▾</span>
                 </button>
               </div>
             </div>
 
             {/* Place name — bottom of hero */}
-            <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"40px 20px 18px",background:"linear-gradient(to top,rgba(0,0,0,0.5) 0%,transparent 100%)"}}>
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:700,color:"white",lineHeight:1.15,marginBottom:5}}>{slot.name}</div>
-              <div style={{fontSize:12,color:"rgba(255,255,255,0.6)",display:"flex",alignItems:"center",gap:4}}>
+            <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"48px 20px 20px",background:"linear-gradient(to top,rgba(0,0,0,0.75) 0%,transparent 100%)"}}>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:700,color:"white",lineHeight:1.15,marginBottom:5,textShadow:"0 2px 12px rgba(0,0,0,0.5)"}}>{slot.name}</div>
+              <div style={{fontSize:12,color:"rgba(255,255,255,0.65)",display:"flex",alignItems:"center",gap:4}}>
                 <span>📍</span>{slot.neighborhood}
               </div>
             </div>
@@ -286,9 +328,18 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
           {/* Action buttons */}
           <div style={{display:"flex",gap:8}} onClick={e=>e.stopPropagation()}>
             {isCompleted ? (
-              <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"12px 0",background:"rgba(74,124,89,0.1)",borderRadius:14}}>
-                {[1,2,3,4,5].map(s=><span key={s} style={{fontSize:18,color:s<=rating?T.gold:T.dust}}>★</span>)}
-              </div>
+              (() => {
+                const c = rating>=9?"#22c55e":rating>=7?"#84cc16":rating>=5?"#eab308":rating>=3?"#f97316":"#ef4444";
+                const lbl = [,"Avoid","Regret it","Disappointing","Underwhelming","It was alright","Worth a visit","Solid pick","Really loved it","Exceptional","One of a kind"][rating]||"";
+                return (
+                  <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:10,padding:"10px 0",background:`${c}18`,borderRadius:14}}>
+                    <div style={{width:36,height:36,borderRadius:"50%",background:c,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 2px 10px ${c}55`}}>
+                      <span style={{fontSize:16,fontWeight:900,color:"white"}}>{rating}</span>
+                    </div>
+                    <span style={{fontSize:13,fontWeight:700,color:c}}>{lbl}</span>
+                  </div>
+                );
+              })()
             ) : isActive ? (
               <button onClick={()=>checkOut(activeDay,activeSlotIdx,slot)}
                 style={{flex:1,padding:"14px 0",borderRadius:14,background:"rgba(255,255,255,0.15)",border:"1.5px solid rgba(255,255,255,0.3)",color:"white",fontSize:14,fontWeight:700,cursor:"pointer"}}>

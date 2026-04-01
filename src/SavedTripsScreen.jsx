@@ -98,10 +98,10 @@ function SavedTripsScreen({ savedTrips, onOpenTrip, onPlanNew, onDeleteTrip }) {
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:48,gap:16}}>
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:48,color:T.dust,lineHeight:1}}>✦</div>
         <div style={{fontSize:15,fontWeight:700,color:T.ink}}>Your adventures start here</div>
-        <div style={{fontSize:13,color:T.inkFaint,textAlign:"center",lineHeight:1.6,maxWidth:240}}>Search a city, set your vibe, and let AI build your perfect trip.</div>
+        <div style={{fontSize:13,color:T.inkFaint,textAlign:"center",lineHeight:1.6,maxWidth:240}}>Pick a city, choose your vibe, and get a full AI-built day-by-day itinerary.</div>
         <button onClick={()=>setShowSearch(true)}
           style={{padding:"14px 28px",borderRadius:16,background:`linear-gradient(135deg,${T.accent},#9b2020)`,border:"none",color:T.white,fontSize:14,fontWeight:700,cursor:"pointer",marginTop:8,boxShadow:"0 6px 20px rgba(200,75,47,0.25)"}}>
-          Plan a trip ✦
+          Search a destination →
         </button>
       </div>
       {showSearch && <CitySearchSheet searchRef={searchRef} query={query} handleQuery={handleQuery} suggestions={suggestions} searching={searching} pickCity={pickCity} onClose={()=>setShowSearch(false)}/>}

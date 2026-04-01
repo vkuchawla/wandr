@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { GLOBAL_CSS, NAV_H, T, TRANSIT_COLORS, TRANSIT_ICONS } from "./constants.jsx";
+import { GLOBAL_CSS, NAV_H, T, TRANSIT_COLORS, TRANSIT_ICONS, CITY_PHOTOS } from "./constants.jsx";
 import { MomentCards } from "./MomentCards.jsx";
 import { PlaceSheet } from "./PlaceSheet.jsx";
 import { ShareCard } from "./ShareCard.jsx";
+import { RatingSheet } from "./RatingSheet.jsx";
 import { parseTripDays, countDays } from "./utils.jsx";
 // Parse trip start date and compute date for each day
 const getDayDate = (dates, dayIdx) => {
@@ -39,7 +40,10 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
   const [tripSaved, setTripSaved] = useState(false);
   const [savedTripId, setSavedTripId] = useState(preloadedDays?.length ? "preloaded" : null);
   const [activeSlot, setActiveSlot] = useState(null); // index of slot user is currently at
-  const [ratings, setRatings]     = useState({}); // { "dayIdx-slotIdx": 1-5 }
+  const ratingsKey = `wandr-ratings-${city}-${dates}`;
+  const [ratings, setRatings] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(ratingsKey) || "{}"); } catch { return {}; }
+  });
   const [showRating, setShowRating] = useState(null); // { dayIdx, slotIdx, slot }
   const [showDaySummary, setShowDaySummary] = useState(null); // day data after completion
   const [viewMode, setViewMode] = useState("story"); // "story" | "plan"
@@ -180,10 +184,11 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
               dates,
               message: msg,
               currentDay: day,
-              allDays: daysData, // full trip context
+              allDays: daysData,
               dayDate,
               profile: profile?.answers || null,
-              history: chatMessages.slice(-6)
+              history: chatMessages.slice(-6),
+              ratings  // pass ratings so AI knows what user liked/disliked
             })
           });
           break;
@@ -236,16 +241,15 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
     setShowRating({ dayIdx, slotIdx, slot });
   };
 
-  const [ratingNote, setRatingNote] = useState("");
-  const [ratingHover, setRatingHover] = useState(0);
   const [ratingStatus, setRatingStatus] = useState(null); // null | "saving" | "saved" | "error"
 
   const submitRating = async (dayIdx, slotIdx, stars, note = "") => {
     const key = `${dayIdx}-${slotIdx}`;
-    setRatings(prev => ({ ...prev, [key]: stars }));
-    setShowRating(null);
-    setRatingNote("");
-    setRatingHover(0);
+    setRatings(prev => {
+      const next = { ...prev, [key]: stars };
+      try { localStorage.setItem(ratingsKey, JSON.stringify(next)); } catch {}
+      return next;
+    });
 
     // Save to Supabase if logged in
     if (supabase && user && stars > 0) {
@@ -278,7 +282,7 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
       const k = `${dayIdx}-${si}`;
       return k === key || ratings[k];
     });
-    if (allRated) setTimeout(() => setShowDaySummary({ day, dayIdx }), 400);
+    if (allRated) setTimeout(() => setShowDaySummary({ day, dayIdx }), 900);
   };
 
   const BUCKET_COLORS = {morning:"#c49a3c",afternoon:"#4a7c59",evening:"#8b1a2f"};
@@ -303,13 +307,22 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
   );
 
   if (status==="loading"&&daysData.length===0) {
+    const loadingCityPhoto = CITY_PHOTOS[cityShort];
     return (
       <div style={{minHeight:"100vh",background:T.ink,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:0,padding:32,fontFamily:"'DM Sans',sans-serif",position:"relative",overflow:"hidden"}}>
         <style>{GLOBAL_CSS}</style>
 
+        {/* City photo background */}
+        {loadingCityPhoto && (
+          <img src={loadingCityPhoto} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.18,filter:"blur(12px)",transform:"scale(1.08)"}} />
+        )}
+
+        {/* Dark overlay */}
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(28,22,18,0.7) 0%,rgba(28,22,18,0.92) 100%)"}}/>
+
         {/* Background glow orbs */}
-        <div style={{position:"absolute",top:"20%",left:"10%",width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,rgba(200,75,47,0.08) 0%,transparent 70%)",pointerEvents:"none"}}/>
-        <div style={{position:"absolute",bottom:"15%",right:"5%",width:240,height:240,borderRadius:"50%",background:"radial-gradient(circle,rgba(196,154,60,0.06) 0%,transparent 70%)",pointerEvents:"none"}}/>
+        <div style={{position:"absolute",top:"20%",left:"10%",width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,rgba(200,75,47,0.1) 0%,transparent 70%)",pointerEvents:"none"}}/>
+        <div style={{position:"absolute",bottom:"15%",right:"5%",width:240,height:240,borderRadius:"50%",background:"radial-gradient(circle,rgba(196,154,60,0.08) 0%,transparent 70%)",pointerEvents:"none"}}/>
 
         {/* Logo mark */}
         <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.22em",textTransform:"uppercase",color:"rgba(196,154,60,0.5)",marginBottom:32}}>✦ WANDR</div>
@@ -381,75 +394,21 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
         </div>
       )}
 
-      {/* Rating modal — Beli-style */}
+      {/* Rating sheet — Beli-style */}
       {showRating && (
-        <div style={{position:"fixed",inset:0,background:"rgba(28,22,18,0.75)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn 0.2s ease"}} onClick={()=>{setShowRating(null);setRatingNote("");setRatingHover(0);}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:T.white,borderRadius:"28px 28px 0 0",width:"100%",maxWidth:480,padding:"24px 24px 48px",animation:"slideUp 0.3s ease",fontFamily:"'DM Sans',sans-serif"}}>
-            <div style={{width:36,height:4,borderRadius:2,background:T.dust,margin:"0 auto 20px"}}/>
-
-            {/* Place info */}
-            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
-              <div style={{width:44,height:44,borderRadius:12,background:`linear-gradient(135deg,${T.ink},#2d1f10)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>
-                {showRating.slot.is_meal ? "🍽" : "📍"}
-              </div>
-              <div>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:T.ink,lineHeight:1.2}}>{showRating.slot.name}</div>
-                <div style={{fontSize:12,color:T.inkFaint}}>{showRating.slot.neighborhood} · {city.split(",")[0]}</div>
-              </div>
-            </div>
-
-            {/* Star rating */}
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:12,fontWeight:700,color:T.inkFaint,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:12,textAlign:"center"}}>How was it?</div>
-              <div style={{display:"flex",justifyContent:"center",gap:8}}>
-                {[1,2,3,4,5].map(star => {
-                  const filled = star <= (ratingHover || ratings[`${showRating.dayIdx}-${showRating.slotIdx}`] || 0);
-                  return (
-                    <button key={star}
-                      onClick={()=>setRatings(prev=>({...prev,[`${showRating.dayIdx}-${showRating.slotIdx}`]:star}))}
-                      onMouseEnter={()=>setRatingHover(star)}
-                      onMouseLeave={()=>setRatingHover(0)}
-                      style={{fontSize:44,background:"none",border:"none",cursor:"pointer",transition:"transform 0.1s",transform:star===(ratingHover||0)?"scale(1.25)":"scale(1)",lineHeight:1,color:filled?T.gold:T.dust}}>
-                      ★
-                    </button>
-                  );
-                })}
-              </div>
-              {/* Star label */}
-              <div style={{textAlign:"center",fontSize:12,color:T.inkFaint,marginTop:8,minHeight:18}}>
-                {["","Didn't enjoy it","It was okay","Good spot","Really liked it","Absolutely loved it"][(ratingHover || ratings[`${showRating.dayIdx}-${showRating.slotIdx}`] || 0)]}
-              </div>
-            </div>
-
-            {/* Note input */}
-            <div style={{marginBottom:16}}>
-              <input
-                value={ratingNote}
-                onChange={e=>setRatingNote(e.target.value)}
-                placeholder="Add a note for friends… (optional)"
-                style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1.5px solid ${ratingNote?T.accent:T.dust}`,background:T.cream,color:T.ink,fontSize:14,outline:"none",transition:"border-color 0.2s"}}/>
-            </div>
-
-            {/* Actions */}
-            <div style={{display:"flex",gap:10}}>
-              <button
-                onClick={()=>submitRating(showRating.dayIdx, showRating.slotIdx, ratings[`${showRating.dayIdx}-${showRating.slotIdx}`]||0, ratingNote)}
-                disabled={!ratings[`${showRating.dayIdx}-${showRating.slotIdx}`]}
-                style={{flex:1,padding:14,borderRadius:16,background:ratings[`${showRating.dayIdx}-${showRating.slotIdx}`]?`linear-gradient(135deg,${T.accent},#9b2020)`:T.dust,border:"none",color:"white",fontSize:14,fontWeight:800,cursor:ratings[`${showRating.dayIdx}-${showRating.slotIdx}`]?"pointer":"default",boxShadow:ratings[`${showRating.dayIdx}-${showRating.slotIdx}`]?"0 6px 20px rgba(200,75,47,0.3)":"none",transition:"all 0.2s"}}>
-                {user ? "Rate & share ✦" : "Save rating"}
-              </button>
-              <button onClick={()=>submitRating(showRating.dayIdx, showRating.slotIdx, 0)}
-                style={{padding:"14px 16px",borderRadius:16,background:T.paper,border:`1px solid ${T.dust}`,color:T.inkFaint,fontSize:13,fontWeight:600,cursor:"pointer"}}>
-                Skip
-              </button>
-            </div>
-            {user && (
-              <div style={{textAlign:"center",fontSize:11,color:T.inkFaint,marginTop:10}}>
-                Your rating will be visible to friends ✦
-              </div>
-            )}
-          </div>
-        </div>
+        <RatingSheet
+          slot={showRating.slot}
+          dayIdx={showRating.dayIdx}
+          slotIdx={showRating.slotIdx}
+          ratings={ratings}
+          daysData={daysData}
+          city={city}
+          user={user}
+          onSubmit={(dayIdx, slotIdx, score, note) => {
+            submitRating(dayIdx, slotIdx, score, note);
+          }}
+          onClose={() => setShowRating(null)}
+        />
       )}
 
       {/* Day summary modal */}
@@ -462,20 +421,26 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
               <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,color:T.ink,marginBottom:6}}>Day {showDaySummary.day.day} complete!</h2>
               <div style={{fontSize:13,color:T.inkFaint,fontStyle:"italic"}}>{showDaySummary.day.theme}</div>
             </div>
-            {showDaySummary.day.slots?.map((slot, si)=>{
-              const r = ratings[`${showDaySummary.dayIdx}-${si}`];
-              return r ? (
-                <div key={si} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:`1px solid ${T.dust}`}}>
-                  <div style={{fontSize:14,fontWeight:600,color:T.ink}}>{slot.name}</div>
-                  <div style={{display:"flex",gap:2}}>
-                    {[1,2,3,4,5].map(s=>(
-                      <span key={s} style={{fontSize:14,color:s<=r?T.gold:T.dust}}>★</span>
-                    ))}
+            {(() => {
+              const SCORE_COLORS = (s) => s>=9?"#22c55e":s>=7?"#84cc16":s>=5?"#eab308":s>=3?"#f97316":"#ef4444";
+              const SCORE_LABELS = [,"Avoid","Regret it","Disappointing","Underwhelming","It was alright","Worth a visit","Solid pick","Really loved it","Exceptional","One of a kind"];
+              const rated = showDaySummary.day.slots?.map((slot, si) => ({ slot, si, r: ratings[`${showDaySummary.dayIdx}-${si}`] })).filter(x => x.r > 0).sort((a,b) => b.r - a.r);
+              return rated?.map(({ slot, si, r }) => (
+                <div key={si} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${T.dust}`}}>
+                  <div style={{width:36,height:36,borderRadius:"50%",background:SCORE_COLORS(r),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:`0 2px 8px ${SCORE_COLORS(r)}44`}}>
+                    <span style={{fontSize:14,fontWeight:900,color:"white"}}>{r}</span>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slot.name}</div>
+                    <div style={{fontSize:11,color:T.inkFaint}}>{SCORE_LABELS[r]}</div>
                   </div>
                 </div>
-              ) : null;
-            })}
-            <button onClick={()=>setShowDaySummary(null)}
+              ));
+            })()}
+            <button onClick={()=>{
+              if (showDaySummary.dayIdx < daysData.length-1) setActiveDay(showDaySummary.dayIdx+1);
+              setShowDaySummary(null);
+            }}
               style={{width:"100%",marginTop:20,padding:15,borderRadius:16,background:T.ink,border:"none",color:T.white,fontSize:15,fontWeight:700,cursor:"pointer"}}>
               {showDaySummary.dayIdx < daysData.length-1 ? `On to Day ${showDaySummary.dayIdx+2} →` : "That's a wrap! ✦"}
             </button>
@@ -529,15 +494,41 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
               </div>
             )}
 
-            {/* Suggestion chips — always visible when no messages or after assistant response */}
+            {/* Suggestion chips — context-aware based on current day */}
             {(chatMessages.length === 0 || chatMessages[chatMessages.length-1]?.role === "assistant") && !chatLoading && (
               <div style={{padding:"10px 16px",display:"flex",gap:6,flexWrap:"wrap",borderBottom:`1px solid ${T.dust}`}}>
-                {["Add a rooftop bar","Make it more local","Swap lunch → street food","Add a morning coffee","More adventurous","Remove last stop"].map(s=>(
-                  <button key={s} onClick={()=>sendChat(s)}
-                    style={{padding:"5px 11px",borderRadius:20,background:T.paper,border:`1px solid ${T.dust}`,fontSize:11,fontWeight:600,color:T.inkLight,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
-                    {s}
-                  </button>
-                ))}
+                {(() => {
+                  const day = daysData[activeDay];
+                  const slots = day?.slots || [];
+                  const cats = slots.map(s => (s.category||"").toLowerCase());
+                  const hasBar = cats.some(c => c.includes("bar") || c.includes("cocktail") || c.includes("nightlife") || c.includes("drink"));
+                  const hasCafe = cats.some(c => c.includes("cafe") || c.includes("coffee"));
+                  const hasMeal = slots.some(s => s.is_meal);
+                  const hasMuseum = cats.some(c => c.includes("museum") || c.includes("gallery") || c.includes("art"));
+                  const worstRatingKey = slots.reduce((worst, _, i) => {
+                    const k = `${activeDay}-${i}`;
+                    const r = ratings[k];
+                    if (!r) return worst;
+                    if (!worst || r < (ratings[worst] || 11)) return k;
+                    return worst;
+                  }, null);
+                  const worstSlot = worstRatingKey ? slots[parseInt(worstRatingKey.split("-")[1])] : null;
+                  const chips = [];
+                  if (worstSlot && ratings[worstRatingKey] <= 5) chips.push(`Replace ${worstSlot.name}`);
+                  if (!hasBar) chips.push("Add a cocktail bar");
+                  if (!hasCafe) chips.push("Add a morning coffee");
+                  if (hasMuseum) chips.push("Swap museum for something active");
+                  chips.push("Make it more local");
+                  if (hasMeal) chips.push("Upgrade lunch to somewhere special");
+                  chips.push("More off the beaten path");
+                  chips.push("Shake up the whole day");
+                  return chips.slice(0, 6).map(s => (
+                    <button key={s} onClick={()=>sendChat(s)}
+                      style={{padding:"5px 11px",borderRadius:20,background:T.paper,border:`1px solid ${T.dust}`,fontSize:11,fontWeight:600,color:T.inkLight,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
+                      {s}
+                    </button>
+                  ));
+                })()}
               </div>
             )}
 
@@ -593,7 +584,7 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
       {/* Header */}
       <div style={{background:`linear-gradient(160deg,${T.ink} 0%,#2d1f10 100%)`,padding:"48px 20px 20px"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-          <button onClick={onBack} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:20,padding:"6px 14px",color:"rgba(255,255,255,0.6)",fontSize:12,fontWeight:600,cursor:"pointer"}}>← Mood board</button>
+          <button onClick={onBack} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:20,padding:"6px 14px",color:"rgba(255,255,255,0.6)",fontSize:12,fontWeight:600,cursor:"pointer"}}>← Back</button>
           {status==="done" && (
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
               <button onClick={saveTrip} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:20,padding:"6px 14px",color:tripSaved?T.gold:"rgba(255,255,255,0.6)",fontSize:12,fontWeight:700,cursor:"pointer"}}>
@@ -690,6 +681,7 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
           getBucket={getBucket}
           TRANSIT_ICONS={TRANSIT_ICONS}
           TRANSIT_COLORS={TRANSIT_COLORS}
+          city={city}
           onUpdateSlots={(newSlots) => {
             setDaysData(prev => prev.map((d, i) =>
               i === activeDay ? { ...d, slots: newSlots } : d
@@ -971,7 +963,7 @@ function PlanMode({ day, activeDay, ratings, BUCKET_COLORS, getBucket, TRANSIT_I
                             {slot.name}
                           </div>
                           {slot.highlight && !isCompleted && <span style={{fontSize:9,fontWeight:700,color:T.gold,background:`${T.gold}15`,borderRadius:6,padding:"2px 5px",flexShrink:0}}>Top pick</span>}
-                          {isCompleted && <div style={{display:"flex",gap:1,flexShrink:0}}>{[1,2,3,4,5].map(s=><span key={s} style={{fontSize:8,color:s<=rating?T.gold:T.dust}}>★</span>)}</div>}
+                          {isCompleted && (() => { const c=rating>=9?"#22c55e":rating>=7?"#84cc16":rating>=5?"#eab308":rating>=3?"#f97316":"#ef4444"; return <div style={{width:22,height:22,borderRadius:"50%",background:c,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:900,color:"white"}}>{rating}</span></div>; })()}
                         </div>
                         <div style={{fontSize:10,color:T.inkFaint,display:"flex",alignItems:"center",gap:8}}>
                           <span>📍 {slot.neighborhood}</span>

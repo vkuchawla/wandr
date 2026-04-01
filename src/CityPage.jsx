@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { GLOBAL_CSS, NAV_H, T, VIBE_COLORS_MAP } from "./constants.jsx";
-function CityPage({ city, dates, supabase, user, onPlan, onRemix, onBack, onSetDates }) {
+const BACKEND = import.meta.env.VITE_BACKEND || "https://wandr-62i6.onrender.com";
+function CityPage({ city, dates, supabase, user, onPlan, onSkipMood, onRemix, onBack, onSetDates }) {
   const [friendTrips, setFriendTrips] = useState([]);
   const [loading, setLoading]         = useState(true);
   const [startDate, setStartDate]     = useState(null);
@@ -8,6 +9,53 @@ function CityPage({ city, dates, supabase, user, onPlan, onRemix, onBack, onSetD
   const [picking, setPicking]         = useState(null);
   const [calOffset, setCalOffset]     = useState(0);
   const [hoverDay, setHoverDay]       = useState(null);
+  const [homeBase, setHomeBase]       = useState("");
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [hotelSuggestions, setHotelSuggestions] = useState([]);
+  const [showHotelSuggestions, setShowHotelSuggestions] = useState(false);
+  const [hotelSuggestionsLoading, setHotelSuggestionsLoading] = useState(false);
+  const hotelTimer = useRef(null);
+
+  const handleHotelChange = (val) => {
+    setHomeBase(val);
+    clearTimeout(hotelTimer.current);
+    if (!val || val.length < 2) { setHotelSuggestions([]); setShowHotelSuggestions(false); return; }
+    setHotelSuggestionsLoading(true);
+    hotelTimer.current = setTimeout(async () => {
+      try {
+        const cityParam = city ? `&city=${encodeURIComponent(city)}` : "";
+        const res = await fetch(`${BACKEND}/hotel-autocomplete?q=${encodeURIComponent(val)}${cityParam}`);
+        const data = await res.json();
+        setHotelSuggestions(data.suggestions || []);
+        setShowHotelSuggestions(true);
+      } catch { setHotelSuggestions([]); }
+      finally { setHotelSuggestionsLoading(false); }
+    }, 300);
+  };
+
+  const selectHotel = (s) => {
+    const full = s.description ? `${s.name}, ${s.description}` : s.name;
+    setHomeBase(full);
+    setHotelSuggestions([]);
+    setShowHotelSuggestions(false);
+  };
+
+  const detectLocation = () => {
+    if (!navigator.geolocation) return;
+    setLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await fetch(`${BACKEND}/reverse-geocode?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}`);
+          const data = await res.json();
+          if (data.address) setHomeBase(data.address);
+        } catch {}
+        setLocationLoading(false);
+      },
+      () => setLocationLoading(false),
+      { timeout: 10000 }
+    );
+  };
 
   const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const MONTHS_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -238,9 +286,66 @@ function CityPage({ city, dates, supabase, user, onPlan, onRemix, onBack, onSetD
           )}
         </div>
 
+        {/* Hotel / Location input */}
+        <div style={{position:"relative",marginBottom:10}}>
+          <div style={{background:T.white,borderRadius:18,padding:"12px 14px",boxShadow:"0 2px 12px rgba(28,22,18,0.08)",border:`1.5px solid ${homeBase ? T.sage : T.dust}`,transition:"border-color 0.2s"}}>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:T.inkFaint,marginBottom:8}}>Where are you staying?</div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:14,flexShrink:0}}>🏨</span>
+              <input
+                value={homeBase}
+                onChange={e=>handleHotelChange(e.target.value)}
+                onFocus={()=>hotelSuggestions.length>0&&setShowHotelSuggestions(true)}
+                onBlur={()=>setTimeout(()=>setShowHotelSuggestions(false),150)}
+                placeholder="Hotel or address (optional)"
+                style={{flex:1,border:"none",background:"transparent",color:homeBase?T.ink:T.inkFaint,fontSize:13,fontWeight:homeBase?600:400,outline:"none",fontFamily:"'DM Sans',sans-serif"}}/>
+              <button
+                onClick={detectLocation}
+                title="Use my current location"
+                style={{flexShrink:0,background:"none",border:"none",padding:"4px 6px",cursor:"pointer",fontSize:18,lineHeight:1,color:T.inkFaint,transition:"color 0.15s",opacity:locationLoading?0.4:1}}>
+                {locationLoading ? "…" : "🔍"}
+              </button>
+              {homeBase && <button onClick={()=>{setHomeBase("");setHotelSuggestions([]);}} style={{background:"none",border:"none",cursor:"pointer",color:T.inkFaint,fontSize:18,lineHeight:1,padding:0,flexShrink:0}}>×</button>}
+            </div>
+            {locationLoading && <div style={{fontSize:11,color:T.inkFaint,marginTop:5}}>Finding your location…</div>}
+            {homeBase && !locationLoading && !showHotelSuggestions && <div style={{fontSize:11,color:T.sage,fontWeight:600,marginTop:5}}>✓ Routing your day from {homeBase.split(",")[0]}</div>}
+          </div>
+          {/* Hotel suggestions dropdown */}
+          {(showHotelSuggestions && hotelSuggestions.length > 0) || hotelSuggestionsLoading ? (
+            <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.white,borderRadius:14,boxShadow:"0 8px 24px rgba(28,22,18,0.12)",border:`1px solid ${T.dust}`,zIndex:60,overflow:"hidden"}}>
+              {hotelSuggestionsLoading && hotelSuggestions.length === 0 && (
+                <div style={{padding:"12px 14px",fontSize:13,color:T.inkFaint}}>Searching hotels…</div>
+              )}
+              {hotelSuggestions.map((s,i)=>(
+                <button key={i} onMouseDown={()=>selectHotel(s)}
+                  style={{width:"100%",padding:"10px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:10,borderBottom:i<hotelSuggestions.length-1?`1px solid ${T.dust}`:"none"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.paper}
+                  onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                  <span style={{fontSize:14,flexShrink:0}}>🏨</span>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:T.ink}}>{s.name}</div>
+                    {s.description&&<div style={{fontSize:11,color:T.inkFaint}}>{s.description}</div>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Fast lane — primary CTA */}
+        <button onClick={()=>onSkipMood ? onSkipMood(homeBase) : onPlan()}
+          style={{width:"100%",padding:"16px 20px",borderRadius:16,background:`linear-gradient(135deg,${T.ink} 0%,#2d1f10 100%)`,border:"none",color:T.white,cursor:"pointer",boxShadow:"0 6px 24px rgba(28,22,18,0.25)",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"space-between",textAlign:"left"}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:800,color:T.white}}>Generate itinerary ✦</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.45)",marginTop:2}}>AI curates the perfect mix for {city.split(",")[0]}</div>
+          </div>
+          <div style={{width:38,height:38,borderRadius:"50%",background:"rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16}}>✦</div>
+        </button>
+
+        {/* Mood lane — secondary CTA */}
         <button onClick={onPlan}
-          style={{width:"100%",padding:15,borderRadius:16,background:`linear-gradient(135deg,${T.accent},#9b2020)`,border:"none",color:T.white,fontSize:15,fontWeight:800,cursor:"pointer",boxShadow:"0 6px 20px rgba(200,75,47,0.3)"}}>
-          Plan my trip ✦
+          style={{width:"100%",padding:"12px 20px",borderRadius:14,background:"transparent",border:`1.5px solid ${T.dust}`,color:T.inkLight,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+          <span style={{fontSize:14}}>🎨</span> Set the mood first →
         </button>
       </div>
     </div>
