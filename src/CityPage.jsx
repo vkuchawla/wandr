@@ -13,6 +13,11 @@ function CityPage({ city, dates, supabase, user, onPlan, onSkipMood, onRemix, on
   const [locationLoading, setLocationLoading] = useState(false);
   const [hotelSuggestions, setHotelSuggestions] = useState([]);
   const [showHotelSuggestions, setShowHotelSuggestions] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteSent, setInviteSent] = useState(false);
+  const [compatibility, setCompatibility] = useState(null); // { score, summary, conflicts }
+  const [compatLoading, setCompatLoading] = useState(false);
   const [hotelSuggestionsLoading, setHotelSuggestionsLoading] = useState(false);
   const hotelTimer = useRef(null);
 
@@ -55,6 +60,38 @@ function CityPage({ city, dates, supabase, user, onPlan, onSkipMood, onRemix, on
       () => setLocationLoading(false),
       { timeout: 10000 }
     );
+  };
+
+  const generateInviteLink = () => {
+    const base = window.location.origin;
+    const params = new URLSearchParams({ planWith: user?.id || "", city, dates: dates || "" });
+    return `${base}?${params.toString()}`;
+  };
+
+  const sendInvite = async () => {
+    if (!inviteEmail.trim() || !supabase) return;
+    // Look up the user by email in profiles — if found, compute compatibility
+    setCompatLoading(true);
+    try {
+      const { data: friendProfiles } = await supabase
+        .from("profiles")
+        .select("id, name, travel_dna, answers")
+        .ilike("name", `%${inviteEmail.split("@")[0]}%`)
+        .limit(1);
+
+      const myProfile = user ? { name: "You", travel_dna: "", answers: {} } : null;
+      if (friendProfiles?.length && myProfile) {
+        const res = await fetch(`${BACKEND}/blend-profiles`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ profiles: [myProfile, friendProfiles[0]] })
+        });
+        const compat = await res.json();
+        setCompatibility(compat);
+      }
+    } catch {}
+    setCompatLoading(false);
+    setInviteSent(true);
   };
 
   const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -347,7 +384,84 @@ function CityPage({ city, dates, supabase, user, onPlan, onSkipMood, onRemix, on
           style={{width:"100%",padding:"12px 20px",borderRadius:14,background:"transparent",border:`1.5px solid ${T.dust}`,color:T.inkLight,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
           <span style={{fontSize:14}}>🎨</span> Set the mood first →
         </button>
+
+        {/* Plan with a friend */}
+        <button onClick={()=>setShowInvite(true)}
+          style={{width:"100%",padding:"12px 20px",borderRadius:14,background:"transparent",border:`1.5px solid ${T.dust}`,color:T.inkLight,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginTop:8}}>
+          <span style={{fontSize:14}}>👥</span> Plan with a friend →
+        </button>
       </div>
+
+      {/* Friend Invite Modal */}
+      {showInvite && (
+        <div style={{position:"fixed",inset:0,background:"rgba(28,22,18,0.75)",zIndex:400,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setShowInvite(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:T.white,borderRadius:"28px 28px 0 0",width:"100%",maxWidth:480,padding:"28px 24px 48px",fontFamily:"'DM Sans',sans-serif"}}>
+            <div style={{width:36,height:4,borderRadius:2,background:T.dust,margin:"0 auto 24px"}}/>
+
+            {!inviteSent ? (
+              <>
+                <div style={{textAlign:"center",marginBottom:24}}>
+                  <div style={{fontSize:36,marginBottom:10}}>👥</div>
+                  <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:T.ink,marginBottom:6}}>Plan with a friend</h2>
+                  <p style={{fontSize:13,color:T.inkFaint,lineHeight:1.6}}>Wandr will blend both travel styles and curate a trip that works for everyone.</p>
+                </div>
+
+                {/* Share link */}
+                <div style={{background:T.paper,borderRadius:14,padding:"12px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:12,color:T.inkLight,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{generateInviteLink()}</span>
+                  <button onClick={()=>{ navigator.clipboard?.writeText(generateInviteLink()); }}
+                    style={{flexShrink:0,padding:"6px 12px",borderRadius:10,background:T.ink,border:"none",color:T.white,fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                    Copy
+                  </button>
+                </div>
+
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+                  <div style={{flex:1,height:1,background:T.dust}}/>
+                  <span style={{fontSize:11,color:T.inkFaint,fontWeight:600,letterSpacing:"0.08em"}}>OR INVITE BY EMAIL</span>
+                  <div style={{flex:1,height:1,background:T.dust}}/>
+                </div>
+
+                <input value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&sendInvite()}
+                  placeholder="friend@email.com" type="email"
+                  style={{width:"100%",padding:"13px 14px",borderRadius:14,border:`1.5px solid ${inviteEmail?T.accent:T.dust}`,background:T.cream,color:T.ink,fontSize:14,outline:"none",marginBottom:12,textAlign:"center"}}/>
+                <button onClick={sendInvite} disabled={!inviteEmail.trim()||compatLoading}
+                  style={{width:"100%",padding:14,borderRadius:16,background:inviteEmail.trim()?`linear-gradient(135deg,${T.accent},#9b2020)`:T.dust,border:"none",color:T.white,fontSize:14,fontWeight:800,cursor:inviteEmail.trim()?"pointer":"default"}}>
+                  {compatLoading ? "Checking compatibility…" : "Send invite →"}
+                </button>
+              </>
+            ) : (
+              <div style={{textAlign:"center"}}>
+                {compatibility ? (
+                  <>
+                    <div style={{fontSize:48,fontWeight:900,color:compatibility.score>=70?T.sage:compatibility.score>=50?"#b5600a":T.accent,fontFamily:"'Playfair Display',serif",marginBottom:4}}>{compatibility.score}%</div>
+                    <div style={{fontSize:16,fontWeight:700,color:T.ink,marginBottom:6}}>Travel compatible</div>
+                    <div style={{fontSize:13,color:T.inkFaint,lineHeight:1.6,marginBottom:20}}>{compatibility.summary}</div>
+                    {compatibility.conflicts?.length > 0 && (
+                      <div style={{background:"#fff8e6",borderRadius:12,padding:"10px 14px",marginBottom:20,textAlign:"left"}}>
+                        <div style={{fontSize:11,fontWeight:700,color:"#b06000",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.08em"}}>Differences Wandr will navigate</div>
+                        {compatibility.conflicts.map((c,i) => (
+                          <div key={i} style={{fontSize:12,color:T.inkLight,padding:"3px 0"}}>· {c}</div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div style={{fontSize:36,marginBottom:12}}>📬</div>
+                    <div style={{fontSize:15,fontWeight:700,color:T.ink,marginBottom:8}}>Invite sent!</div>
+                  </>
+                )}
+                <div style={{fontSize:13,color:T.inkFaint,marginBottom:20}}>Share the link with your friend — when they join, Wandr will blend your travel styles automatically.</div>
+                <button onClick={()=>{ setShowInvite(false); setInviteSent(false); setInviteEmail(""); setCompatibility(null); }}
+                  style={{padding:"12px 28px",borderRadius:14,background:T.ink,border:"none",color:T.white,fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                  Got it
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

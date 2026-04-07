@@ -88,6 +88,18 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
     setStatus("loading"); setDaysData([]); setActiveDay(0); savedRef.current=false;
     setLoadingTipIdx(0);
 
+    // Fetch user's rating history to personalise generation
+    let ratingHistory = [];
+    if (supabase && user) {
+      const { data: ratings } = await supabase
+        .from("place_ratings")
+        .select("place_name, city, stars")
+        .eq("user_id", user.id)
+        .order("rated_at", { ascending: false })
+        .limit(30);
+      ratingHistory = ratings || [];
+    }
+
     // Generate days sequentially so each day knows what previous days used
     const allDays = [];
     for (let i = 0; i < totalDays; i++) {
@@ -104,8 +116,9 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
             dayVibe: dayVibes[d-1] || "open / flexible",
             totalDays,
             travelProfile: profile?.answers || null,
-            usedPlaces, // pass places already used in previous days
-            homeBase: homeBase || null
+            usedPlaces,
+            homeBase: homeBase || null,
+            ratingHistory,
           })
         }).then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e.error || "Error")));
 
@@ -650,15 +663,28 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
           })}
         </div>
         {/* Mode toggle */}
-        <div style={{display:"flex",background:T.paper,borderRadius:20,padding:3,gap:2,flexShrink:0,border:`1px solid ${T.dust}`}}>
-          <button onClick={()=>setViewMode("story")}
-            style={{padding:"5px 12px",borderRadius:16,background:viewMode==="story"?T.ink:"transparent",border:"none",color:viewMode==="story"?"white":T.inkFaint,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-            ▶ Story
-          </button>
-          <button onClick={()=>setViewMode("plan")}
-            style={{padding:"5px 12px",borderRadius:16,background:viewMode==="plan"?T.ink:"transparent",border:"none",color:viewMode==="plan"?"white":T.inkFaint,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-            ☰ Plan
-          </button>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          {/* Open today's route in Google Maps */}
+          {day?.slots?.length > 1 && (() => {
+            const stops = day.slots.map(s => encodeURIComponent(`${s.name}, ${city}`));
+            const mapsUrl = `https://www.google.com/maps/dir/${stops.join("/")}`;
+            return (
+              <a href={mapsUrl} target="_blank" rel="noreferrer"
+                style={{padding:"5px 10px",borderRadius:16,background:T.paper,border:`1px solid ${T.dust}`,color:T.inkLight,fontSize:11,fontWeight:700,textDecoration:"none",display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                🗺 Route
+              </a>
+            );
+          })()}
+          <div style={{display:"flex",background:T.paper,borderRadius:20,padding:3,gap:2,border:`1px solid ${T.dust}`}}>
+            <button onClick={()=>setViewMode("story")}
+              style={{padding:"5px 12px",borderRadius:16,background:viewMode==="story"?T.ink:"transparent",border:"none",color:viewMode==="story"?"white":T.inkFaint,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+              ▶ Story
+            </button>
+            <button onClick={()=>setViewMode("plan")}
+              style={{padding:"5px 12px",borderRadius:16,background:viewMode==="plan"?T.ink:"transparent",border:"none",color:viewMode==="plan"?"white":T.inkFaint,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+              ☰ Plan
+            </button>
+          </div>
         </div>
       </div>
 

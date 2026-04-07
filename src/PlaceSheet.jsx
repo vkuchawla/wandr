@@ -114,23 +114,50 @@ function PlaceSheet({ place, city, category, BACKEND, onClose }) {
             </div>
 
             {/* Open status + action strip */}
-            <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.dust}`,display:"flex",alignItems:"center",gap:10}}>
+            <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.dust}`,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
               {data.isOpenNow !== null && data.isOpenNow !== undefined && (
                 <span style={{fontSize:12,fontWeight:700,color:data.isOpenNow?"#2d8a4e":"#c84b2f",background:data.isOpenNow?"#e8f7ee":"#fdecea",padding:"4px 10px",borderRadius:20}}>
                   {data.isOpenNow ? "● Open now" : "● Closed"}
                 </span>
               )}
               <div style={{flex:1}}/>
-              <a href={data.mapsUrl} target="_blank" rel="noreferrer" style={{padding:"8px 14px",borderRadius:20,background:T.ink,color:T.white,fontSize:12,fontWeight:700,textDecoration:"none"}}>
+              <a href={data.mapsUrl} target="_blank" rel="noreferrer" style={{padding:"8px 14px",borderRadius:20,background:T.ink,color:T.white,fontSize:12,fontWeight:700,textDecoration:"none",flexShrink:0}}>
                 📍 Directions
               </a>
+              {/* Booking deep links — shown for restaurants/bars/experiences */}
+              {(() => {
+                const cat = (data.category || category || "").toLowerCase();
+                const isFood = ["restaurant","cafe","bar","bistro","brasserie","food","dining"].some(k => cat.includes(k));
+                const isActivity = ["museum","gallery","tour","activity","experience","attraction","entertainment"].some(k => cat.includes(k));
+                const citySlug = city?.split(",")[0]?.toLowerCase().replace(/\s+/g, "-") || "";
+                const q = encodeURIComponent(data.name);
+                if (isFood) return (
+                  <>
+                    <a href={`https://resy.com/cities/${citySlug}?query=${q}`} target="_blank" rel="noreferrer"
+                      style={{padding:"8px 12px",borderRadius:20,background:"#e8f0ff",color:"#2255cc",fontSize:12,fontWeight:700,textDecoration:"none",border:"1px solid #c5d5ff",flexShrink:0}}>
+                      Reserve
+                    </a>
+                    <a href={`https://www.opentable.com/s?term=${q}&metroId=`} target="_blank" rel="noreferrer"
+                      style={{padding:"8px 12px",borderRadius:20,background:T.paper,color:T.inkLight,fontSize:12,fontWeight:700,textDecoration:"none",border:`1px solid ${T.dust}`,flexShrink:0}}>
+                      OpenTable
+                    </a>
+                  </>
+                );
+                if (isActivity) return (
+                  <a href={`https://www.viator.com/search/${encodeURIComponent(data.name + " " + city)}`} target="_blank" rel="noreferrer"
+                    style={{padding:"8px 12px",borderRadius:20,background:"#fff3e0",color:"#b06000",fontSize:12,fontWeight:700,textDecoration:"none",border:"1px solid #ffd580",flexShrink:0}}>
+                    Book Tours
+                  </a>
+                );
+                return null;
+              })()}
               {data.website && (
-                <a href={data.website} target="_blank" rel="noreferrer" style={{padding:"8px 14px",borderRadius:20,background:T.paper,color:T.ink,fontSize:12,fontWeight:700,textDecoration:"none",border:`1px solid ${T.dust}`}}>
-                  🌐 Website
+                <a href={data.website} target="_blank" rel="noreferrer" style={{padding:"8px 12px",borderRadius:20,background:T.paper,color:T.ink,fontSize:12,fontWeight:700,textDecoration:"none",border:`1px solid ${T.dust}`,flexShrink:0}}>
+                  🌐
                 </a>
               )}
               {data.phone && (
-                <a href={`tel:${data.phone}`} style={{padding:"8px 12px",borderRadius:20,background:T.paper,color:T.ink,fontSize:12,fontWeight:700,textDecoration:"none",border:`1px solid ${T.dust}`}}>📞</a>
+                <a href={`tel:${data.phone}`} style={{padding:"8px 12px",borderRadius:20,background:T.paper,color:T.ink,fontSize:12,fontWeight:700,textDecoration:"none",border:`1px solid ${T.dust}`,flexShrink:0}}>📞</a>
               )}
             </div>
 

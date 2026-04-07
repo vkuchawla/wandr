@@ -2,6 +2,7 @@ require("dotenv").config({ override: true });
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const rateLimit = require("express-rate-limit");
 
 const app = express();
 const PORT = 3001;
@@ -9,6 +10,22 @@ const PORT = 3001;
 app.use(cors({ origin: "*", methods: ["GET","POST","OPTIONS"], allowedHeaders: ["Content-Type","Authorization"] }));
 app.use((req, res, next) => { res.header("Access-Control-Allow-Origin", "*"); next(); }); // extra safety for cold starts
 app.use(express.json());
+
+// Rate limiters
+const itineraryLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20, // 20 day-generations per hour per IP
+  message: { error: "Too many requests — please try again in an hour." },
+  standardHeaders: true, legacyHeaders: false,
+});
+const chatLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 40, // 40 chat edits per 15 minutes
+  message: { error: "Too many edits — please wait a moment." },
+  standardHeaders: true, legacyHeaders: false,
+});
+app.use("/itinerary", itineraryLimiter);
+app.use("/chat-edit", chatLimiter);
 
 app.get("/health", (_, res) => res.json({ ok: true }));
 app.get("/debug-key", (_, res) => {
@@ -100,9 +117,36 @@ const checkHoursConflict = (timeStr, periods) => {
   } catch(e) { return null; }
 };
 
+// Profile blending helper — used for group trips
+function blendProfiles(profiles) {
+  if (!profiles || profiles.length === 0) return null;
+  if (profiles.length === 1) return profiles[0].answers;
+  const paceOrder = ["slow", "balanced", "fast"];
+  const budgetOrder = ["budget", "moderate", "luxury"];
+  const answers = profiles.map(p => p.answers || {});
+  const paceIdx = Math.min(...answers.map(a => Math.max(0, paceOrder.indexOf(a.pace || "balanced"))));
+  const budgetIdx = Math.min(...answers.map(a => Math.max(0, budgetOrder.indexOf(a.budget || "moderate"))));
+  const conflicts = [];
+  const paces = [...new Set(answers.map(a => a.pace).filter(Boolean))];
+  const budgets = [...new Set(answers.map(a => a.budget).filter(Boolean))];
+  const vibes = [...new Set(answers.map(a => a.vibe).filter(Boolean))];
+  if (paces.length > 1) conflicts.push(`pace: ${paces.join(" vs ")}`);
+  if (budgets.length > 1) conflicts.push(`budget: ${budgets.join(" vs ")}`);
+  if (vibes.length > 1) conflicts.push(`vibe: ${vibes.join(" vs ")}`);
+  return {
+    pace: paceOrder[paceIdx],
+    budget: budgetOrder[budgetIdx],
+    food: answers.map(a => a.food).filter(Boolean).join(" and "),
+    vibe: answers[0].vibe,
+    companions: "group",
+    _conflicts: conflicts,
+    _members: profiles.map(p => ({ name: p.name, dna: p.travel_dna, answers: p.answers }))
+  };
+}
+
 // Single day endpoint — fast, called once per day
 app.post("/itinerary/day", async (req, res) => {
-  const { city, dates, dayNum, dayVibe, totalDays, travelProfile, usedPlaces = [], homeBase } = req.body;
+  const { city, dates, dayNum, dayVibe, totalDays, travelProfile, usedPlaces = [], homeBase, ratingHistory = [], groupProfiles = [] } = req.body;
   if (!city || !dayNum) return res.status(400).json({ error: "city and dayNum required" });
 
   const usedPlacesContext = usedPlaces.length > 0
@@ -139,16 +183,39 @@ app.post("/itinerary/day", async (req, res) => {
     return lines.length ? "\nTraveller profile:\n" + lines.join("\n") : "";
   };
 
-  const profileContext = buildProfileContext(travelProfile);
+  // Use blended group profile if group trip, otherwise solo profile
+  const effectiveProfile = groupProfiles.length > 1
+    ? blendProfiles(groupProfiles)
+    : travelProfile;
+
+  const profileContext = buildProfileContext(effectiveProfile);
   const homeBaseContext = homeBase
     ? `\nThe traveller is staying at/near: ${homeBase}. Use this to optimize the route — ideally start the day close to their accommodation, then loop outward efficiently. Consider walking distance from their base for the first stop. Don't mention the hotel by name in the itinerary unless directly relevant.\n`
     : "";
+
+  // Ratings context — personalise based on past behaviour
+  const ratingsContext = ratingHistory.length > 0 ? (() => {
+    const high = ratingHistory.filter(r => r.stars >= 4).slice(0, 8);
+    const low  = ratingHistory.filter(r => r.stars <= 2).slice(0, 5);
+    const lines = [];
+    if (high.length) lines.push(`Loved (4-5★): ${high.map(r => `${r.place_name} in ${r.city}`).join(", ")}`);
+    if (low.length)  lines.push(`Didn't enjoy (1-2★): ${low.map(r => `${r.place_name} in ${r.city}`).join(", ")}`);
+    return `\nThis traveller's taste (from past ratings — use this to personalise):\n${lines.join("\n")}\nPrioritise places with a similar feel to their high-rated picks. Avoid anything resembling their low-rated picks.\n`;
+  })() : "";
+
+  // Group trip context
+  const groupContext = groupProfiles.length > 1 ? (() => {
+    const blended = blendProfiles(groupProfiles);
+    const memberList = blended._members.map(m => `- ${m.name}: ${m.dna || "traveller"}${m.answers?.vibe ? `, loves to ${m.answers.vibe}` : ""}`).join("\n");
+    const conflictStr = blended._conflicts.length ? `\nKnown preference differences: ${blended._conflicts.join("; ")}` : "";
+    return `\nThis is a GROUP TRIP for ${groupProfiles.length} people:\n${memberList}${conflictStr}\nDesign the day so each person gets at least one moment that's specifically for them. Find spots that genuinely work for the whole group — not just bland compromises. Note [For {name}] in the must_know field for any slot that's especially tailored to one person.\n`;
+  })() : "";
 
   const prompt = `You are an expert local travel curator — think of yourself as a well-traveled friend who lives in ${city} and knows every neighborhood intimately. You are NOT a generic travel guide. You give real, specific, opinionated recommendations.
 
 Plan Day ${dayNum} of ${totalDays} in ${city}.
 Trip dates: ${dates}
-Today's vibes: ${dayVibe || "open / flexible"}${profileContext}${homeBaseContext}
+Today's vibes: ${dayVibe || "open / flexible"}${profileContext}${homeBaseContext}${ratingsContext}${groupContext}
 ${usedPlacesContext}
 
 VIBE GUIDE:
@@ -378,6 +445,51 @@ app.get("/hotel-autocomplete", async (req, res) => {
     console.error("Hotel autocomplete error:", e.response?.data || e.message);
     res.json({ suggestions: [] });
   }
+});
+
+// Profile blending endpoint — compute compatibility + blended profile for group trips
+app.post("/blend-profiles", (req, res) => {
+  const { profiles } = req.body; // [{ name, travel_dna, answers }]
+  if (!profiles || profiles.length < 2) return res.status(400).json({ error: "Need at least 2 profiles" });
+
+  const blended = blendProfiles(profiles);
+
+  // Compatibility score (0-100)
+  const answers = profiles.map(p => p.answers || {});
+  let score = 100;
+  const paceOrder = ["slow", "balanced", "fast"];
+  const paces = answers.map(a => paceOrder.indexOf(a.pace || "balanced"));
+  const paceDiff = Math.max(...paces) - Math.min(...paces);
+  score -= paceDiff * 15;
+
+  const budgetOrder = ["budget", "moderate", "luxury"];
+  const budgets = answers.map(a => budgetOrder.indexOf(a.budget || "moderate"));
+  const budgetDiff = Math.max(...budgets) - Math.min(...budgets);
+  score -= budgetDiff * 10;
+
+  const vibes = answers.map(a => a.vibe);
+  const uniqueVibes = new Set(vibes.filter(Boolean));
+  if (uniqueVibes.size > 1) score -= 10;
+
+  const foods = answers.map(a => a.food);
+  const uniqueFoods = new Set(foods.filter(Boolean));
+  if (uniqueFoods.size <= 1) score += 5; // bonus for matching food tastes
+  score = Math.max(20, Math.min(100, score));
+
+  // Human-readable compatibility summary
+  const summaryParts = [];
+  if (blended._conflicts.length === 0) summaryParts.push("You two are a great travel match");
+  if (paceDiff === 0) summaryParts.push("same pace");
+  if (budgetDiff === 0) summaryParts.push("same budget");
+  if (uniqueFoods.size === 1) summaryParts.push("same food taste");
+  if (blended._conflicts.length) summaryParts.push(`differences: ${blended._conflicts.join(", ")}`);
+
+  res.json({
+    score,
+    summary: summaryParts.join(" · "),
+    blended,
+    conflicts: blended._conflicts,
+  });
 });
 
 // Place detail endpoint — Google Places (New API with fallback)

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { OnboardingSplash } from "./OnboardingSplash.jsx";
 
 const BACKEND = import.meta.env.VITE_BACKEND || "https://wandr-62i6.onrender.com";
@@ -14,11 +14,19 @@ import { HomeScreen } from "./HomeScreen.jsx";
 import { ProfileScreen } from "./ProfileScreen.jsx";
 import { ExploreScreen } from "./ExploreScreen.jsx";
 import { MoodBoard } from "./MoodBoard.jsx";
-import { ItineraryView } from "./ItineraryView.jsx";
 import { CityPage } from "./CityPage.jsx";
-import { SavedTripsScreen } from "./SavedTripsScreen.jsx";
-import { SocialScreen } from "./Social.jsx";
 import { AuthGateModal, AuthScreen, SignInPrompt } from "./Auth.jsx";
+
+// Heavy screens — code split so they don't block initial load
+const ItineraryView  = lazy(() => import("./ItineraryView.jsx").then(m => ({ default: m.ItineraryView })));
+const SavedTripsScreen = lazy(() => import("./SavedTripsScreen.jsx").then(m => ({ default: m.SavedTripsScreen })));
+const SocialScreen   = lazy(() => import("./Social.jsx").then(m => ({ default: m.SocialScreen })));
+
+const LazyFallback = () => (
+  <div style={{minHeight:"100vh",background:T.cream,display:"flex",alignItems:"center",justifyContent:"center"}}>
+    <div style={{fontFamily:"'Playfair Display',serif",fontSize:40,color:T.inkFaint,animation:"pulse 1.5s ease infinite"}}>✦</div>
+  </div>
+);
 
 const supabase = createClient(
   "https://ejutttjjptmkhyqxoytl.supabase.co",
@@ -224,11 +232,11 @@ export default function App() {
         {screen==="profile"     && !user && <SignInPrompt supabase={supabase}/>}
         {screen==="profile"     && user  && <ProfileScreen profile={profile} onSaveProfile={handleSaveProfile} supabase={supabase} savedTrips={savedTrips} onOpenTrip={handleOpenTrip}/>}
         {screen==="explore"     && <ExploreScreen onSelectCity={(c)=>{setCity(c);setScreen("city");}} onStart={handleStart} supabase={supabase} user={user}/>}
-        {screen==="social" && <SocialScreen supabase={supabase} user={user} onRemix={(trip)=>{ setCity(trip.city); setDates(trip.dates||""); setMoodContext(trip.mood_context||""); setScreen("mood"); }} onPlanCity={(c)=>{ setCity(c); setDates(""); setScreen("city"); }}/>}
+        {screen==="social" && <Suspense fallback={<LazyFallback/>}><SocialScreen supabase={supabase} user={user} onRemix={(trip)=>{ setCity(trip.city); setDates(trip.dates||""); setMoodContext(trip.mood_context||""); setScreen("mood"); }} onPlanCity={(c)=>{ setCity(c); setDates(""); setScreen("city"); }}/></Suspense>}
         {screen==="city" && <CityPage city={city} dates={dates} supabase={supabase} user={user} onPlan={()=>setScreen("mood")} onSkipMood={(hotel="")=>{ setHomeBase(hotel||""); setMoodContext(""); setGeneratedDays([]); setScreen("itinerary"); }} onRemix={(trip)=>{ setMoodContext(trip.mood_context||""); setScreen("mood"); }} onBack={()=>setScreen("home")} onSetDates={(d)=>setDates(d)}/>}
         {screen==="mood"        && <MoodBoard city={city} dates={dates} onBuild={handleBuild} onBack={()=>setScreen("city")} profile={profile} remixContext={moodContext}/>}
-        {screen==="itinerary"   && <ItineraryView city={city} dates={dates} moodContext={moodContext} homeBase={homeBase} profile={profile} onBack={()=>{ setMoodContext(""); setGeneratedDays([]); setScreen("mood"); }} onSave={handleSaveTrip} preloadedDays={generatedDays.length > 0 ? generatedDays : undefined} onDaysGenerated={setGeneratedDays} supabase={supabase} user={user}/>}
-        {screen==="saved"       && <SavedTripsScreen savedTrips={savedTrips} onOpenTrip={handleOpenTrip} onPlanNew={(c)=>{ setCity(c); setDates(""); setScreen("city"); }} onDeleteTrip={async (trip) => {
+        {screen==="itinerary"   && <Suspense fallback={<LazyFallback/>}><ItineraryView city={city} dates={dates} moodContext={moodContext} homeBase={homeBase} profile={profile} onBack={()=>{ setMoodContext(""); setGeneratedDays([]); setScreen("mood"); }} onSave={handleSaveTrip} preloadedDays={generatedDays.length > 0 ? generatedDays : undefined} onDaysGenerated={setGeneratedDays} supabase={supabase} user={user}/></Suspense>}
+        {screen==="saved"       && <Suspense fallback={<LazyFallback/>}><SavedTripsScreen savedTrips={savedTrips} onOpenTrip={handleOpenTrip} onPlanNew={(c)=>{ setCity(c); setDates(""); setScreen("city"); }} onDeleteTrip={async (trip) => {
           // 1. Remove from local state immediately
           setSavedTrips(prev => prev.filter(t => !(t.city === trip.city && t.dates === trip.dates)));
           setRefreshKey(k => k + 1); // trigger home screen re-fetch
@@ -258,9 +266,9 @@ export default function App() {
               .eq("user_id", user.id)
               .eq("city", trip.city.split(",")[0].trim());
           }
-        }}/>}
+        }}</Suspense>}
         {screen==="trip-detail" && openTrip && (
-          <ItineraryView city={openTrip.city} dates={openTrip.dates} moodContext={openTrip.moodContext||openTrip.mood_context||""} preloadedDays={openTrip.days||[]} onBack={()=>setScreen("saved")} onSave={()=>{}} supabase={supabase} user={user}/>
+          <Suspense fallback={<LazyFallback/>}><ItineraryView city={openTrip.city} dates={openTrip.dates} moodContext={openTrip.moodContext||openTrip.mood_context||""} preloadedDays={openTrip.days||[]} onBack={()=>setScreen("saved")} onSave={()=>{}} supabase={supabase} user={user}/></Suspense>
         )}
         {/* Resume pill — shown when user navigated away from an active itinerary */}
         {city && moodContext && !["itinerary","loading","splash","auth","onboarding"].includes(screen) && (
