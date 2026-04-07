@@ -266,7 +266,7 @@ export default function App() {
               .eq("user_id", user.id)
               .eq("city", trip.city.split(",")[0].trim());
           }
-        }}</Suspense>}
+        }}/></Suspense>}
         {screen==="trip-detail" && openTrip && (
           <Suspense fallback={<LazyFallback/>}><ItineraryView city={openTrip.city} dates={openTrip.dates} moodContext={openTrip.moodContext||openTrip.mood_context||""} preloadedDays={openTrip.days||[]} onBack={()=>setScreen("saved")} onSave={()=>{}} supabase={supabase} user={user}/></Suspense>
         )}
