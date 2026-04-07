@@ -5,6 +5,7 @@ import { PlaceSheet } from "./PlaceSheet.jsx";
 import { ShareCard } from "./ShareCard.jsx";
 import { RatingSheet } from "./RatingSheet.jsx";
 import { parseTripDays, countDays } from "./utils.jsx";
+import { AuthGateModal } from "./Auth.jsx";
 // Parse trip start date and compute date for each day
 const getDayDate = (dates, dayIdx) => {
   if (!dates) return null;
@@ -48,6 +49,7 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
   const [showDaySummary, setShowDaySummary] = useState(null); // day data after completion
   const [viewMode, setViewMode] = useState("story"); // "story" | "plan"
   const [loadingTipIdx, setLoadingTipIdx] = useState(0);
+  const [showAuthGate, setShowAuthGate] = useState(false);
   const savedRef = useRef(false);
 
   const totalDays = countDays(dates);
@@ -222,6 +224,7 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
 
   const saveTrip = async () => {
     if (tripSaved) return;
+    if (!user) { setShowAuthGate(true); return; }
     onSave({ city, dates, moodContext, days:daysData, emoji:"✦", savedAt:Date.now() });
     setTripSaved(true);
     // Get the trip ID from Supabase for linking ratings
@@ -384,6 +387,7 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
 
       {showShare && <ShareCard city={city} dates={dates} days={daysData} moodContext={moodContext} onClose={()=>setShowShare(false)}/>}
       {selectedPlace && <PlaceSheet place={selectedPlace.name} city={city} category={selectedPlace.category} BACKEND={BACKEND} onClose={()=>setSelectedPlace(null)}/>}
+      {showAuthGate && <AuthGateModal supabase={supabase} reason="save" onClose={()=>setShowAuthGate(false)}/>}
 
       {/* Rating status toast */}
       {ratingStatus && (
