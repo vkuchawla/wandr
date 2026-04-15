@@ -1,6 +1,31 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { T, GLOBAL_CSS, NAV_H, MONTHS_FULL, MONTHS_SHORT, DAYS, CITY_PHOTOS, TRAVEL_DNAS } from "./constants.jsx";
-function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, refreshKey }) {
+// ── DEV PREVIEW TOGGLE ─────────────────────────────────────
+// Flip to true to preview all Home states without signing in.
+// Set to false (or remove) before shipping.
+const DEV_PREVIEW = !import.meta.env.PROD && false;
+
+const DEV_PROFILE = {
+  name: "Vedant",
+  travelDna: "The Food Explorer",
+  answers: { pace:"medium", food:"everything", vibe:"immerse", budget:"mid", companions:"partner" },
+};
+const DEV_TRIPS = [
+  { city:"Tokyo, Japan", dates:"Mar 18 – Mar 21, 2026", mood_context:"Day 1: Street Food, Cultural\nDay 2: Nightlife", days:[{day:1,theme:"Tsukiji & Shibuya"},{day:2,theme:"Golden Gai"},{day:3,theme:"Yanaka temples"}], emoji:"✦", savedAt:Date.now()-86400000*30 },
+  { city:"Lisbon, Portugal", dates:"Jan 5 – Jan 8, 2026", mood_context:"Day 1: Slow Morning, Cultural", days:[{day:1,theme:"Alfama & pastéis"},{day:2,theme:"Belém & LX Factory"}], emoji:"✦", savedAt:Date.now()-86400000*90 },
+  { city:"Barcelona, Spain", dates:"Aug 10 – Aug 14, 2026", mood_context:"Day 1: Street Food\nDay 2: Adventure", days:[{day:1,theme:"Gothic Quarter"},{day:2,theme:"Park Güell"}], emoji:"✦", savedAt:Date.now()-86400000*1 },
+];
+const DEV_FRIENDS = [
+  { city:"Marrakech, Morocco", dates:"Apr 20 – Apr 24, 2026", mood_context:"Day 1: Cultural", days:[{day:1},{day:2},{day:3}], profiles:{name:"Maya T."}, user_id:"other", is_public:true, saved_at:new Date().toISOString() },
+  { city:"Seoul, South Korea", dates:"May 1 – May 4, 2026", mood_context:"Day 1: Street Food, Nightlife", days:[{day:1},{day:2}], profiles:{name:"Alex K."}, user_id:"other2", is_public:true, saved_at:new Date().toISOString() },
+];
+// ────────────────────────────────────────────────────────────
+
+function HomeScreen({ onStart, savedTrips: _savedTrips, profile: _profile, onOpenTrip, supabase, user: _user, refreshKey }) {
+  const savedTrips = DEV_PREVIEW ? DEV_TRIPS : _savedTrips;
+  const profile = DEV_PREVIEW ? DEV_PROFILE : _profile;
+  const user = DEV_PREVIEW ? { id:"dev" } : _user;
+
   const [city, setCity]     = useState("");
   const [startDate, setStart] = useState(null);
   const [endDate, setEnd]     = useState(null);
@@ -21,6 +46,7 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
   }, [user]);
 
   useEffect(() => {
+    if (DEV_PREVIEW) { setFriendActivity(DEV_FRIENDS); setUserLoaded(true); return; }
     if (!supabase) return;
     // Wait for auth to settle before fetching - check session first
     supabase.auth.getSession().then(({ data: { session } }) => {
