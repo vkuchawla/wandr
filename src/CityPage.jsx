@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { GLOBAL_CSS, NAV_H, T, VIBE_COLORS_MAP } from "./constants.jsx";
-const BACKEND = import.meta.env.VITE_BACKEND || "https://wandr-62i6.onrender.com";
+const BACKEND = import.meta.env.VITE_BACKEND || (import.meta.env.PROD ? "https://wandr-62i6.onrender.com" : "");
 function CityPage({ city, dates, supabase, user, onPlan, onSkipMood, onRemix, onBack, onSetDates }) {
   const [friendTrips, setFriendTrips] = useState([]);
   const [loading, setLoading]         = useState(true);

@@ -55,7 +55,7 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
   const totalDays = countDays(dates);
   const dayVibes  = moodContext.split("\n").filter(Boolean);
 
-  const BACKEND = import.meta.env.VITE_BACKEND || "https://wandr-62i6.onrender.com";
+  const BACKEND = import.meta.env.VITE_BACKEND || (import.meta.env.PROD ? "https://wandr-62i6.onrender.com" : "");
 
   const cityShort = city?.split(",")[0] || city;
 

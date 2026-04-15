@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { OnboardingSplash } from "./OnboardingSplash.jsx";
 
-const BACKEND = import.meta.env.VITE_BACKEND || "https://wandr-62i6.onrender.com";
+const BACKEND = import.meta.env.VITE_BACKEND || (import.meta.env.PROD ? "https://wandr-62i6.onrender.com" : "");
 
 // Keep Render backend warm — ping on load and every 14 minutes
 const pingBackend = () => fetch(`${BACKEND}/health`).catch(()=>{});

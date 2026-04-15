@@ -11,7 +11,7 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [friendActivity, setFriendActivity] = useState([]);
   const autocompleteTimer = useRef(null);
-  const BACKEND = import.meta.env.VITE_BACKEND || "https://wandr-62i6.onrender.com";
+  const BACKEND = import.meta.env.VITE_BACKEND || (import.meta.env.PROD ? "https://wandr-62i6.onrender.com" : "");
 
   const [userLoaded, setUserLoaded] = useState(false);
 

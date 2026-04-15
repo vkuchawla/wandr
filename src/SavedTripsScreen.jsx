@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { CITY_PHOTOS, DAYS, GLOBAL_CSS, NAV_H, T, VIBE_COLORS_MAP } from "./constants.jsx";
-const BACKEND = import.meta.env.VITE_BACKEND || "https://wandr-62i6.onrender.com";
+const BACKEND = import.meta.env.VITE_BACKEND || (import.meta.env.PROD ? "https://wandr-62i6.onrender.com" : "");
 
 function CitySearchSheet({ searchRef, query, handleQuery, suggestions, searching, pickCity, onClose }) {
   return (

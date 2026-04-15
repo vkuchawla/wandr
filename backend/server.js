@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 const rateLimit = require("express-rate-limit");
+const { jsonrepair } = require("jsonrepair");
 
 const app = express();
 const PORT = 3001;
@@ -27,7 +28,7 @@ const chatLimiter = rateLimit({
 app.use("/itinerary", itineraryLimiter);
 app.use("/chat-edit", chatLimiter);
 
-app.get("/health", (_, res) => res.json({ ok: true }));
+app.get("/health", (_, res) => res.json({ ok: true, keySet: !!KEY, keyPrefix: KEY ? KEY.slice(0,12) + "..." : "none" }));
 app.get("/debug-key", (_, res) => {
   const k = process.env.ANTHROPIC_API_KEY || "";
   res.json({ prefix: k.slice(0, 20), suffix: k.slice(-6), length: k.length });
@@ -283,7 +284,7 @@ Add "highlight":true to the ONE slot that is the standout experience of the day 
     const clean = text.replace(/```json|```/g, "").trim();
     const first = clean.indexOf("{"); const last = clean.lastIndexOf("}");
     if (first === -1) throw new Error("No JSON in response");
-    const parsed = JSON.parse(clean.slice(first, last + 1));
+    const parsed = JSON.parse(jsonrepair(clean.slice(first, last + 1)));
 
     // Post-process: auto-correct transit_from_prev to match transit_mode
     const modeWords = { walk:"walk", subway:"subway", taxi:"taxi", uber:"Uber", lyft:"Lyft", bus:"bus", tram:"tram", "tuk-tuk":"tuk-tuk", ferry:"ferry", bike:"bike", drive:"drive" };
@@ -628,7 +629,7 @@ OR
     const first = clean.indexOf("{");
     const last = clean.lastIndexOf("}");
     if (first === -1) throw new Error("No JSON");
-    const result = JSON.parse(clean.slice(first, last + 1));
+    const result = JSON.parse(jsonrepair(clean.slice(first, last + 1)));
     res.json(result);
   } catch(e) {
     console.error("Validate time error:", e.message);
@@ -717,7 +718,7 @@ Return ONLY this JSON — no explanation, no markdown:
       return res.json({ message: message_text + " (No changes made — try rephrasing)" });
     }
 
-    const updatedDay = JSON.parse(clean.slice(first, last + 1));
+    const updatedDay = JSON.parse(jsonrepair(clean.slice(first, last + 1)));
     if (!updatedDay.slots?.length) {
       return res.json({ message: message_text + " (Something went wrong with the edit)" });
     }
