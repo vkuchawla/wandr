@@ -19,6 +19,19 @@ const getDayDate = (dates, dayIdx) => {
   } catch { return null; }
 };
 
+// Returns YYYYMMDD for Google Calendar URLs
+const getCalendarDate = (dates, dayIdx) => {
+  if (!dates) return null;
+  const match = dates.match(/([A-Za-z]+\s+\d+)/);
+  if (!match) return null;
+  try {
+    const year = dates.match(/\d{4}/)?.[0] || new Date().getFullYear();
+    const base = new Date(`${match[1]}, ${year}`);
+    base.setDate(base.getDate() + dayIdx);
+    return base.toISOString().slice(0, 10).replace(/-/g, "");
+  } catch { return null; }
+};
+
 function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, onSave, preloadedDays, onDaysGenerated, supabase, user }) {
   // Deduplicate days — keep only first occurrence of each day number
   const dedupeDays = (days) => {
@@ -40,6 +53,8 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
   const [undoStack, setUndoStack] = useState([]); // for undo after AI edits
   const [tripSaved, setTripSaved] = useState(false);
   const [savedTripId, setSavedTripId] = useState(preloadedDays?.length ? "preloaded" : null);
+  const [showSaveNudge, setShowSaveNudge] = useState(false);
+  const [failedDays, setFailedDays] = useState({}); // dayNum → error string
   const [activeSlot, setActiveSlot] = useState(null); // index of slot user is currently at
   const ratingsKey = `wandr-ratings-${city}-${dates}`;
   const [ratings, setRatings] = useState(() => {
@@ -56,6 +71,7 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
   const dayVibes  = moodContext.split("\n").filter(Boolean);
 
   const BACKEND = import.meta.env.VITE_BACKEND || (import.meta.env.PROD ? "https://wandr-62i6.onrender.com" : "");
+  const localKey = `wandr-itinerary-${city}-${dates}`;
 
   const cityShort = city?.split(",")[0] || city;
 
@@ -72,7 +88,13 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
 
   // Sync generated days back to parent so resume doesn't re-fetch
   useEffect(() => {
-    if (daysData.length > 0) onDaysGenerated?.(daysData);
+    if (daysData.length > 0) {
+      onDaysGenerated?.(daysData);
+      // Keep localStorage in sync (but don't overwrite during generation — that's handled inline)
+      if (status === "done") {
+        try { localStorage.setItem(localKey, JSON.stringify(daysData)); } catch {}
+      }
+    }
   }, [daysData]);
 
   // Rotate loading tips every 2.8s while generating
@@ -84,9 +106,59 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
     return () => clearInterval(interval);
   }, [status]);
 
+  const fetchDay = async (d, usedPlaces, ratingHistory) => {
+    for (let attempt = 0; attempt <= 2; attempt++) {
+      try {
+        return await fetch(`${BACKEND}/itinerary/day`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            city, dates,
+            dayNum: d,
+            dayVibe: dayVibes[d-1] || "open / flexible",
+            totalDays,
+            travelProfile: profile?.answers || null,
+            usedPlaces,
+            homeBase: homeBase || null,
+            ratingHistory,
+          })
+        }).then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e.error || "Error")));
+      } catch(e) {
+        if (attempt < 2) {
+          await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+        } else {
+          throw e;
+        }
+      }
+    }
+  };
+
+  const retryDay = async (dayNum) => {
+    setFailedDays(prev => { const n = {...prev}; delete n[dayNum]; return n; });
+    const i = dayNum - 1;
+    setStatusMsg(`Retrying Day ${dayNum}…`);
+    const usedPlaces = daysData.flatMap(day => day?.slots?.map(s => s.name) || []);
+    try {
+      const dayData = await fetchDay(dayNum, usedPlaces, []);
+      setDaysData(prev => {
+        const updated = [...prev];
+        // Insert or replace at correct position
+        const existingIdx = updated.findIndex(d => d.day === dayNum);
+        if (existingIdx >= 0) updated[existingIdx] = dayData;
+        else updated.splice(i, 0, dayData);
+        try { localStorage.setItem(localKey, JSON.stringify(updated)); } catch {}
+        return updated;
+      });
+    } catch(e) {
+      setFailedDays(prev => ({ ...prev, [dayNum]: String(e) }));
+    }
+    setStatusMsg("");
+  };
+
   const generate = async () => {
     setStatus("loading"); setDaysData([]); setActiveDay(0); savedRef.current=false;
-    setLoadingTipIdx(0);
+    setLoadingTipIdx(0); setFailedDays({});
+    try { localStorage.removeItem(localKey); } catch {}
 
     // Fetch user's rating history to personalise generation
     let ratingHistory = [];
@@ -102,26 +174,13 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
 
     // Generate days sequentially so each day knows what previous days used
     const allDays = [];
+    const newFailedDays = {};
     for (let i = 0; i < totalDays; i++) {
       const d = i + 1;
       setStatusMsg(totalDays > 1 ? `Planning Day ${d} of ${totalDays}…` : `Planning your day in ${cityShort}…`);
       const usedPlaces = allDays.flatMap(day => day?.slots?.map(s => s.name) || []);
       try {
-        const dayData = await fetch(`${BACKEND}/itinerary/day`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            city, dates,
-            dayNum: d,
-            dayVibe: dayVibes[d-1] || "open / flexible",
-            totalDays,
-            travelProfile: profile?.answers || null,
-            usedPlaces,
-            homeBase: homeBase || null,
-            ratingHistory,
-          })
-        }).then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e.error || "Error")));
-
+        const dayData = await fetchDay(d, usedPlaces, ratingHistory);
         allDays[i] = dayData;
         setDaysData([...allDays].filter(Boolean));
         setLoadingDay(i + 2);
@@ -129,11 +188,18 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
       } catch(e) {
         console.error(`Day ${d} error:`, e);
         allDays[i] = null;
+        newFailedDays[d] = String(e);
       }
     }
 
-    setDaysData(allDays.filter(Boolean));
+    const finalDays = allDays.filter(Boolean);
+    setDaysData(finalDays);
+    setFailedDays(newFailedDays);
     setStatus("done");
+    // Persist to localStorage
+    try { localStorage.setItem(localKey, JSON.stringify(finalDays)); } catch {}
+    // Show save nudge if user isn't logged in and trip generated successfully
+    if (finalDays.length > 0 && !user) setTimeout(() => setShowSaveNudge(true), 3000);
     setTimeout(() => enrichSlots(), 500);
   };
 
@@ -162,7 +228,20 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
     });
   };
 
-  useEffect(()=>{ if (!preloadedDays?.length) generate(); }, []);
+  useEffect(()=>{
+    if (preloadedDays?.length) return;
+    // Try to restore from localStorage before fetching
+    try {
+      const cached = JSON.parse(localStorage.getItem(localKey) || "null");
+      if (cached?.length > 0) {
+        setDaysData(cached);
+        setStatus("done");
+        onDaysGenerated?.(cached);
+        return;
+      }
+    } catch {}
+    generate();
+  }, []);
 
   // Keep Render backend warm — ping every 14 minutes to prevent cold starts
   useEffect(() => {
@@ -401,6 +480,21 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
       {showShare && <ShareCard city={city} dates={dates} days={daysData} moodContext={moodContext} onClose={()=>setShowShare(false)}/>}
       {selectedPlace && <PlaceSheet place={selectedPlace.name} city={city} category={selectedPlace.category} BACKEND={BACKEND} onClose={()=>setSelectedPlace(null)}/>}
       {showAuthGate && <AuthGateModal supabase={supabase} reason="save" onClose={()=>setShowAuthGate(false)}/>}
+
+      {/* Save nudge — shown ~3s after generation if not logged in */}
+      {showSaveNudge && (
+        <div style={{position:"fixed",bottom:NAV_H+16,left:"50%",transform:"translateX(-50%)",zIndex:400,animation:"fadeUp 0.4s ease",maxWidth:340,width:"calc(100% - 40px)"}}>
+          <div style={{background:T.ink,borderRadius:18,padding:"14px 18px",boxShadow:"0 8px 32px rgba(28,22,18,0.35)",display:"flex",alignItems:"center",gap:12}}>
+            <span style={{fontSize:22}}>✦</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:700,color:"white",marginBottom:2}}>Save your itinerary</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.5)"}}>Sign in to keep it & access anywhere.</div>
+            </div>
+            <button onClick={()=>{ setShowSaveNudge(false); saveTrip(); }} style={{padding:"8px 14px",borderRadius:12,background:T.accent,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0}}>Save</button>
+            <button onClick={()=>setShowSaveNudge(false)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",fontSize:18,cursor:"pointer",padding:"0 4px",flexShrink:0,lineHeight:1}}>×</button>
+          </div>
+        </div>
+      )}
 
       {/* Rating status toast */}
       {ratingStatus && (
@@ -675,6 +769,32 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
               </a>
             );
           })()}
+          {/* Add to Calendar */}
+          {day && (() => {
+            const calDate = getCalendarDate(dates, activeDay);
+            const slots = day.slots || [];
+            const firstTime = slots[0]?.time || "09:00 AM";
+            const lastEnd = slots[slots.length-1]?.end_time || "09:00 PM";
+            const toGcalTime = (t, d) => {
+              if (!t || !d) return d + "T090000";
+              const m = t.match(/(\d+):(\d+)\s*(AM|PM)/i);
+              if (!m) return d + "T090000";
+              let h = parseInt(m[1]), min = parseInt(m[2]);
+              const pm = m[3].toUpperCase()==="PM";
+              if (pm && h!==12) h+=12;
+              if (!pm && h===12) h=0;
+              return `${d}T${String(h).padStart(2,"0")}${String(min).padStart(2,"0")}00`;
+            };
+            const title = encodeURIComponent(`${cityShort} – Day ${day.day}: ${day.theme || "Itinerary"}`);
+            const details = encodeURIComponent(slots.map(s=>`${s.time} ${s.name}`).join("\n"));
+            const calUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${toGcalTime(firstTime,calDate)}/${toGcalTime(lastEnd,calDate)}&details=${details}`;
+            return (
+              <a href={calUrl} target="_blank" rel="noreferrer"
+                style={{padding:"5px 10px",borderRadius:16,background:T.paper,border:`1px solid ${T.dust}`,color:T.inkLight,fontSize:11,fontWeight:700,textDecoration:"none",display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                📅 Add
+              </a>
+            );
+          })()}
           <div style={{display:"flex",background:T.paper,borderRadius:20,padding:3,gap:2,border:`1px solid ${T.dust}`}}>
             <button onClick={()=>setViewMode("story")}
               style={{padding:"5px 12px",borderRadius:16,background:viewMode==="story"?T.ink:"transparent",border:"none",color:viewMode==="story"?"white":T.inkFaint,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
@@ -687,6 +807,21 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
           </div>
         </div>
       </div>
+
+      {/* Failed day banners */}
+      {Object.entries(failedDays).map(([dayNum, errMsg]) => (
+        <div key={dayNum} style={{margin:"8px 16px 0",background:"rgba(200,75,47,0.07)",border:"1px solid rgba(200,75,47,0.25)",borderRadius:14,padding:"11px 14px",display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:16}}>⚠️</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#c84b2f"}}>Day {dayNum} couldn't be generated</div>
+            <div style={{fontSize:11,color:"#c84b2f",opacity:0.75,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{errMsg || "Try again"}</div>
+          </div>
+          <button onClick={()=>retryDay(Number(dayNum))}
+            style={{padding:"7px 14px",borderRadius:10,background:"#c84b2f",border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+            Retry
+          </button>
+        </div>
+      ))}
 
       {/* Day theme bar */}
       {day?.theme && (

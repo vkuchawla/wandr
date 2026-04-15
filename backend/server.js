@@ -639,7 +639,7 @@ OR
 
 // Chat edit endpoint — AI makes live edits to a day
 app.post("/chat-edit", async (req, res) => {
-  const { city, dates, message, currentDay, allDays = [], dayDate, profile, history = [] } = req.body;
+  const { city, dates, message, currentDay, allDays = [], dayDate, profile, history = [], ratings = {} } = req.body;
   if (!message || !currentDay) return res.status(400).json({ error: "message and currentDay required" });
 
   const profileContext = profile ? (() => {
@@ -670,38 +670,61 @@ app.post("/chat-edit", async (req, res) => {
     ? "\nPrevious edits:\n" + history.map(m => `${m.role === "user" ? "User" : "AI"}: ${m.text}`).join("\n")
     : "";
 
-  const jsonPrompt = `You are the AI travel editor for Wandr. Edit this itinerary directly — never ask for more information.
+  // Detect intent to guide surgical edits
+  const msgLower = message.toLowerCase();
+  const isAdd = /add|include|also|want|need|get/i.test(msgLower);
+  const isReplace = /replace|swap|change|instead|different|not a fan|hate|remove|drop|skip/i.test(msgLower);
+  const isShakeUp = /shake|completely|redo|regenerate|start over|new day|remix|overhaul/i.test(msgLower);
+  let intentHint = "";
+  if (isShakeUp) intentHint = "INTENT: Full rethink — replace most or all slots with fresh ideas.";
+  else if (isReplace) intentHint = "INTENT: Surgical swap — only change the specific slot(s) mentioned. Keep all other slots IDENTICAL (same name, time, activity).";
+  else if (isAdd) intentHint = "INTENT: Addition — insert a new slot at an appropriate time. Keep all existing slots IDENTICAL.";
+  else intentHint = "INTENT: Targeted change — make only the minimal change necessary. Keep all unmentioned slots IDENTICAL.";
+
+  const ratingContext = Object.keys(ratings).length > 0
+    ? `\nUSER RATINGS (use to avoid low-rated slot types): ${Object.entries(ratings).map(([k, v]) => `slot ${k}: ${v}/10`).join(", ")}`
+    : "";
+
+  const slotList = (currentDay.slots || []).map((s, i) =>
+    `  [${i}] ${s.time}–${s.end_time} | ${s.name} | ${s.category || ""} | ${s.neighborhood || ""}`
+  ).join("\n");
+
+  const jsonPrompt = `You are the AI travel editor for Wandr. Edit this itinerary based on the user's request. Be surgical and precise.
 
 TRIP: ${city}${dates ? ` · ${dates}` : ""}
 ${otherDaysContext}
 EDITING: Day ${currentDay.day}${dayDate ? ` (${dayDate})` : ""}
 THEME: ${currentDay.theme}
-CURRENT SLOTS (${currentDay.slots?.length || 0} stops):
-${JSON.stringify(currentDay.slots, null, 2)}
+CURRENT SLOTS (by index):
+${slotList}
 ${usedPlacesNote}
 ${profileContext}
+${ratingContext}
 ${historyContext}
 
 USER REQUEST: "${message}"
 
-RULES:
-- Edit directly — never ask for more info
-- Use only REAL places in ${city}
-- Do NOT repeat places from other days
-- Maintain chronological time flow, no overlaps
-- Keep existing slots unless asked to change them
-- Slot schema: {time, end_time, name, category, neighborhood, activity, transit_from_prev, price, must_know, is_meal, highlight}
+${intentHint}
 
-Return ONLY this JSON — no explanation, no markdown:
-{"day":${currentDay.day},"theme":"${currentDay.theme}","slots":[...complete updated slots...]}`;
+STRICT RULES:
+1. Use only REAL places in ${city} — no made-up venues
+2. Do NOT repeat any place already on this or other days
+3. Maintain chronological time order, no overlaps
+4. Unmentioned slots → copy them EXACTLY from above, unchanged
+5. New slot schema: {time, end_time, name, category, neighborhood, activity, transit_mode, transit_from_prev, price, must_know, is_meal, highlight}
+6. transit_from_prev = travel time from previous stop, e.g. "12 min walk"
+7. If adding a slot, set highlight:true only if it's exceptional
 
-  const msgPrompt = `In under 12 words confirm what changed: "Done! ___" for this ${city} request: "${message}". Be specific. Example: "Done! Added New York Bar rooftop after dinner."`;
+Return ONLY valid JSON — no explanation, no markdown:
+{"day":${currentDay.day},"theme":"<updated theme if needed, otherwise keep>","slots":[...all slots...]}`;
+
+  const msgPrompt = `In under 14 words confirm exactly what changed in ${city}: "Done! ___" for request: "${message}". Be specific, e.g. "Done! Swapped the museum for a rooftop bar at 6 PM."`;
 
   try {
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000));
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 28000));
     const [jsonText, msgText] = await Promise.race([
       Promise.all([
-        callClaude(jsonPrompt, 2, 2000, "claude-haiku-4-5-20251001"),
+        callClaude(jsonPrompt, 2, 2200, "claude-haiku-4-5-20251001"),
         callClaude(msgPrompt, 1, 150, "claude-haiku-4-5-20251001")
       ]),
       timeout.then(() => { throw new Error("timeout"); })
@@ -723,16 +746,17 @@ Return ONLY this JSON — no explanation, no markdown:
       return res.json({ message: message_text + " (Something went wrong with the edit)" });
     }
 
-    // Enrich new slots with photos
+    // Enrich ONLY new slots with photos
     const existingNames = new Set(currentDay.slots.map(s => s.name));
     const newSlots = updatedDay.slots.filter(s => !existingNames.has(s.name));
     if (newSlots.length > 0) {
       await enrichWithPhotos(newSlots, city);
     }
-    // Preserve existing photos
+    // Preserve existing photos (never strip photos from unchanged slots)
     updatedDay.slots = updatedDay.slots.map(s => {
       const existing = currentDay.slots.find(e => e.name === s.name);
-      return existing?.photo ? { ...s, photo: existing.photo } : s;
+      if (existing?.photo) return { ...s, photo: existing.photo, confidence: existing.confidence };
+      return s;
     });
 
     res.json({ updatedDay, message: message_text });

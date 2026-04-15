@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { GLOBAL_CSS, NAV_H, T, VIBE_COLORS_MAP, CITY_PHOTOS } from "./constants.jsx";
+import { GLOBAL_CSS, NAV_H, T, VIBE_COLORS_MAP, CITY_PHOTOS, EXPLORE_CITIES } from "./constants.jsx";
 
 function parseVibesFromContext(moodCtx) {
   if (!moodCtx) return [];
@@ -462,20 +462,48 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
               ))}
             </div>
           ) : (activeTrips.length + upcomingTrips.length + pastTrips.length + placeRatings.length) === 0 ? (
-            <div style={{textAlign:"center",padding:"48px 20px"}}>
-              <div style={{fontSize:40,marginBottom:12}}>{tab==="friends" ? "👀" : "🌍"}</div>
-              <div style={{fontSize:16,fontWeight:700,color:T.ink,marginBottom:8}}>
-                {tab==="friends" ? "Nothing from your friends yet" : "Be the first to explore"}
-              </div>
-              <div style={{fontSize:13,color:T.inkFaint,lineHeight:1.6,marginBottom:20,maxWidth:260,margin:"0 auto 20px"}}>
-                {tab==="friends"
-                  ? "Follow people to see where they're traveling. Or save your own trips — they'll show up here too."
-                  : "Save a trip, rate a place, and your activity will appear here for others to discover and remix."}
-              </div>
-              <button onClick={()=>setTab(tab==="friends"?"find":"find")}
-                style={{padding:"12px 24px",borderRadius:14,background:T.ink,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                {tab==="friends" ? "Find people to follow →" : "Find people →"}
-              </button>
+            <div style={{paddingBottom:16}}>
+              {tab === "friends" ? (
+                <div style={{textAlign:"center",padding:"48px 20px"}}>
+                  <div style={{fontSize:40,marginBottom:12}}>👀</div>
+                  <div style={{fontSize:16,fontWeight:700,color:T.ink,marginBottom:8}}>Nothing from your friends yet</div>
+                  <div style={{fontSize:13,color:T.inkFaint,lineHeight:1.6,marginBottom:20,maxWidth:260,margin:"0 auto 20px"}}>Follow people to see where they're traveling.</div>
+                  <button onClick={()=>setTab("find")} style={{padding:"12px 24px",borderRadius:14,background:T.ink,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:"pointer"}}>Find people to follow →</button>
+                </div>
+              ) : (
+                <>
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:11,fontWeight:800,letterSpacing:"0.12em",textTransform:"uppercase",color:T.gold,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+                      🔥 Trending destinations
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                      {EXPLORE_CITIES.slice(0, 8).map(c => {
+                        const photo = CITY_PHOTOS[c.city];
+                        return (
+                          <div key={c.city} style={{background:T.white,borderRadius:16,overflow:"hidden",border:`1px solid ${T.dust}`,boxShadow:"0 2px 10px rgba(28,22,18,0.06)"}}>
+                            <div style={{position:"relative",height:100,background:`linear-gradient(135deg,${c.bg},${c.accent}40)`}}>
+                              {photo && <img src={photo} alt={c.city} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.75}} onError={e=>e.target.style.display="none"}/>}
+                              <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0) 30%,rgba(0,0,0,0.6) 100%)"}}/>
+                              <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"8px 12px"}}>
+                                <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:"white"}}>{c.city}</div>
+                                <div style={{fontSize:11,color:"rgba(255,255,255,0.6)"}}>{c.tag}</div>
+                              </div>
+                              <div style={{position:"absolute",top:8,right:8,fontSize:20}}>{c.emoji}</div>
+                            </div>
+                            <div style={{padding:"10px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                              <div style={{fontSize:12,color:T.inkFaint}}>Plan a trip here →</div>
+                              <button onClick={()=>onPlanCity(c.city)}
+                                style={{padding:"7px 14px",borderRadius:10,background:T.ink,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                                ✦ Plan
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <>
