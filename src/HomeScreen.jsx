@@ -245,101 +245,103 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
     <div style={{minHeight:"100vh",background:T.cream,fontFamily:"'DM Sans',sans-serif",paddingBottom:NAV_H+20}}>
       <style>{GLOBAL_CSS}</style>
 
-      {/* ── 1. Full-bleed hero photo header ── */}
-      <div style={{position:"relative",height:310,overflow:"hidden",background:T.ink}}>
-        <img
-          src="https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&q=80"
-          alt="Travel"
-          style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",objectPosition:"center 40%",transform:"scale(1.04)"}}
-        />
-        {/* Deep cinematic gradient */}
-        <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.3) 30%, rgba(18,12,8,0.9) 72%, rgba(18,12,8,1) 100%)"}}/>
-        {/* Warm vignette */}
-        <div style={{position:"absolute",inset:0,backgroundImage:"radial-gradient(ellipse at 50% 110%,rgba(196,154,60,0.14) 0%,transparent 65%)",pointerEvents:"none"}}/>
+      {/* ── 1. Dark header: branding + greeting + search ── */}
+      <div style={{background:`linear-gradient(160deg,#1a1008 0%,${T.ink} 100%)`,padding:"52px 16px 20px",position:"relative",overflow:"hidden"}}>
+        {/* Subtle warm radial glow */}
+        <div style={{position:"absolute",top:0,right:0,width:200,height:200,backgroundImage:"radial-gradient(circle at 100% 0%,rgba(196,154,60,0.1) 0%,transparent 65%)",pointerEvents:"none"}}/>
 
-        {/* Top status bar */}
-        <div style={{position:"absolute",top:52,left:20,right:20,zIndex:2,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div style={{fontSize:12,fontWeight:800,letterSpacing:"0.2em",textTransform:"uppercase",color:"rgba(196,154,60,0.8)"}}>✦ WANDR</div>
-          {firstName && (
-            <div style={{fontSize:12,fontWeight:600,color:"rgba(255,255,255,0.55)",letterSpacing:"0.01em"}}>{timeGreeting}, {firstName}</div>
+        {/* Top row: wordmark + greeting */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+          <div style={{fontSize:13,fontWeight:800,letterSpacing:"0.22em",textTransform:"uppercase",color:T.gold}}>✦ WANDR</div>
+          {firstName ? (
+            <div style={{fontSize:12,fontWeight:500,color:"rgba(255,255,255,0.45)"}}>{timeGreeting}, {firstName}</div>
+          ) : (
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontStyle:"italic",fontFamily:"'Playfair Display',serif"}}>AI travel planner</div>
           )}
         </div>
 
-        {/* Large city headline + CTA */}
-        <div style={{position:"absolute",bottom:72,left:20,right:20,zIndex:2}}>
-          {/* Featured tag */}
-          <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.16em",textTransform:"uppercase",color:"rgba(196,154,60,0.7)",marginBottom:8}}>Featured destination</div>
-          <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:12}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:46,fontWeight:900,color:"white",lineHeight:0.95,letterSpacing:"-1px",textShadow:"0 4px 24px rgba(0,0,0,0.4)"}}>
-                {heroCity}
-              </div>
-              <div style={{fontSize:12,color:"rgba(255,255,255,0.38)",marginTop:7,fontStyle:"italic",fontFamily:"'Playfair Display',serif",lineHeight:1.4}}>
-                AI-built for your travel style
-              </div>
+        {/* Hero line */}
+        <div style={{marginBottom:18}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:900,color:"white",lineHeight:1.1,letterSpacing:"-0.5px"}}>
+            {heroLine}
+          </div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,0.4)",marginTop:6,lineHeight:1.5}}>{subLine}</div>
+        </div>
+
+        {/* ── Search bar embedded in header ── */}
+        <div style={{position:"relative",zIndex:10}}>
+          <div style={{
+            background:"rgba(255,255,255,0.07)",
+            borderRadius:18,
+            padding:"3px 3px 3px 16px",
+            display:"flex",gap:8,alignItems:"center",
+            border:"1px solid rgba(255,255,255,0.1)",
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="2.5" strokeLinecap="round" style={{flexShrink:0}}>
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <div style={{flex:1,position:"relative"}}>
+              <input value={city} onChange={e=>handleCityChange(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Enter"&&city.trim()){ onStart(city.trim(), "", ""); setShowSuggestions(false); } }}
+                onBlur={()=>setTimeout(()=>setShowSuggestions(false),150)}
+                onFocus={()=>{ handleSearchFocus(); suggestions.length>0&&setShowSuggestions(true); }}
+                placeholder="Where to next?"
+                style={{width:"100%",padding:"12px 0",border:"none",background:"transparent",color:"white",fontSize:15,fontWeight:600,outline:"none",fontFamily:"'DM Sans',sans-serif"}}/>
+              <style>{`input::placeholder{color:rgba(255,255,255,0.3)!important}`}</style>
+              {(showSuggestions && suggestions.length > 0) || suggestionsLoading ? (
+                <div style={{position:"absolute",top:"calc(100% + 10px)",left:-32,right:0,background:T.white,borderRadius:18,boxShadow:"0 12px 40px rgba(28,22,18,0.2)",border:`1px solid ${T.dust}`,zIndex:50,overflow:"hidden"}}>
+                  {suggestionsLoading && suggestions.length === 0 && (
+                    <div style={{padding:"14px 18px",fontSize:13,color:T.inkFaint}}>Searching…</div>
+                  )}
+                  {suggestions.map((s,i)=>(
+                    <button key={i} onMouseDown={()=>selectSuggestion(s)}
+                      style={{width:"100%",padding:"13px 18px",background:"none",border:"none",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:12,borderBottom:i<suggestions.length-1?`1px solid ${T.dust}`:"none"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.paper}
+                      onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                      <div style={{width:32,height:32,borderRadius:10,background:T.cream,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>📍</div>
+                      <div>
+                        <div style={{fontSize:14,fontWeight:700,color:T.ink}}>{s.name}</div>
+                        {s.description&&<div style={{fontSize:12,color:T.inkFaint,marginTop:1}}>{s.description}</div>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
-            <button
-              onClick={()=>setQuickPlan(heroCity)}
-              onMouseDown={e=>e.currentTarget.style.transform="scale(0.94)"}
+            <button onClick={()=>{ if(city.trim()){ onStart(city.trim(), "", ""); setShowSuggestions(false); }}}
+              onMouseDown={e=>city.trim()&&(e.currentTarget.style.transform="scale(0.92)")}
               onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
               onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}
-              style={{flexShrink:0,padding:"11px 18px",borderRadius:22,background:`linear-gradient(135deg,${T.accent},#a83520)`,border:"none",color:"white",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:"0 6px 20px rgba(200,75,47,0.55)",whiteSpace:"nowrap",letterSpacing:"0.01em",transition:"transform 0.15s,box-shadow 0.15s"}}>
-              Plan it →
+              style={{flexShrink:0,width:44,height:44,borderRadius:15,background:city.trim()?`linear-gradient(135deg,${T.accent},#9b2020)`:"rgba(255,255,255,0.08)",border:"none",color:city.trim()?"white":"rgba(255,255,255,0.25)",fontSize:18,fontWeight:900,cursor:city.trim()?"pointer":"default",transition:"background 0.2s,transform 0.15s",boxShadow:city.trim()?"0 4px 14px rgba(200,75,47,0.4)":"none",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              →
             </button>
           </div>
         </div>
       </div>
 
-      {/* ── 2. Search bar ── */}
-      <div style={{margin:"0 14px",position:"relative",zIndex:10,marginTop:-46}}>
-        <div style={{
-          background:"rgba(255,255,255,0.97)",
-          backdropFilter:"blur(12px)",
-          WebkitBackdropFilter:"blur(12px)",
-          borderRadius:22,
-          padding:"10px 10px 10px 16px",
-          boxShadow:"0 8px 32px rgba(28,22,18,0.18), 0 2px 8px rgba(28,22,18,0.08)",
-          display:"flex",gap:8,alignItems:"center",
-          border:"1px solid rgba(255,255,255,0.6)",
-        }}>
-          {/* Search icon */}
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={city ? T.accent : T.inkFaint} strokeWidth="2.5" strokeLinecap="round" style={{flexShrink:0,transition:"stroke 0.2s"}}>
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-          </svg>
-          <div style={{flex:1,position:"relative"}}>
-            <input value={city} onChange={e=>handleCityChange(e.target.value)}
-              onKeyDown={e=>{ if(e.key==="Enter"&&city.trim()){ onStart(city.trim(), "", ""); setShowSuggestions(false); } }}
-              onBlur={()=>setTimeout(()=>setShowSuggestions(false),150)}
-              onFocus={()=>{ handleSearchFocus(); suggestions.length>0&&setShowSuggestions(true); }}
-              placeholder="Where to next?"
-              style={{width:"100%",padding:"8px 0",border:"none",background:"transparent",color:T.ink,fontSize:15,fontWeight:600,outline:"none",fontFamily:"'DM Sans',sans-serif"}}/>
-            {(showSuggestions && suggestions.length > 0) || suggestionsLoading ? (
-              <div style={{position:"absolute",top:"calc(100% + 10px)",left:-16,right:0,background:T.white,borderRadius:18,boxShadow:"0 12px 40px rgba(28,22,18,0.15)",border:`1px solid ${T.dust}`,zIndex:50,overflow:"hidden"}}>
-                {suggestionsLoading && suggestions.length === 0 && (
-                  <div style={{padding:"14px 18px",fontSize:13,color:T.inkFaint}}>Searching…</div>
-                )}
-                {suggestions.map((s,i)=>(
-                  <button key={i} onMouseDown={()=>selectSuggestion(s)}
-                    style={{width:"100%",padding:"13px 18px",background:"none",border:"none",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:12,borderBottom:i<suggestions.length-1?`1px solid ${T.dust}`:"none"}}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.paper}
-                    onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                    <div style={{width:32,height:32,borderRadius:10,background:T.cream,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>📍</div>
-                    <div>
-                      <div style={{fontSize:14,fontWeight:700,color:T.ink}}>{s.name}</div>
-                      {s.description&&<div style={{fontSize:12,color:T.inkFaint,marginTop:1}}>{s.description}</div>}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : null}
+      {/* ── 2. Featured city card ── */}
+      <div style={{padding:"16px 16px 0"}}>
+        <div onClick={()=>setQuickPlan(heroCity)}
+          onMouseDown={e=>e.currentTarget.style.transform="scale(0.985)"}
+          onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
+          onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}
+          style={{height:190,borderRadius:22,overflow:"hidden",cursor:"pointer",background:T.ink,position:"relative",boxShadow:"0 6px 28px rgba(28,22,18,0.2)",transition:"transform 0.18s ease"}}>
+          {heroCityPhoto && <img src={heroCityPhoto} alt={heroCity} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.72}} onError={e=>e.target.style.display="none"}/>}
+          <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.08) 0%,rgba(0,0,0,0.62) 100%)"}}/>
+          <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"18px 18px 18px",display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:12}}>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",color:"rgba(255,255,255,0.5)",marginBottom:4}}>Featured</div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:900,color:"white",lineHeight:1,letterSpacing:"-0.5px",textShadow:"0 2px 12px rgba(0,0,0,0.4)"}}>{heroCity}</div>
+            </div>
+            <button
+              onClick={e=>{e.stopPropagation();setQuickPlan(heroCity);}}
+              onMouseDown={e=>e.currentTarget.style.transform="scale(0.94)"}
+              onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
+              onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}
+              style={{flexShrink:0,padding:"10px 16px",borderRadius:20,background:`linear-gradient(135deg,${T.accent},#a83520)`,border:"none",color:"white",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:"0 4px 16px rgba(200,75,47,0.5)",whiteSpace:"nowrap",transition:"transform 0.15s"}}>
+              Plan it →
+            </button>
           </div>
-          <button onClick={()=>{ if(city.trim()){ onStart(city.trim(), "", ""); setShowSuggestions(false); }}}
-            onMouseDown={e=>city.trim()&&(e.currentTarget.style.transform="scale(0.92)")}
-            onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
-            onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}
-            style={{flexShrink:0,width:42,height:42,borderRadius:14,background:city.trim()?`linear-gradient(135deg,${T.accent},#9b2020)`:"#ede5db",border:"none",color:city.trim()?"white":"#c0b09a",fontSize:18,fontWeight:900,cursor:city.trim()?"pointer":"default",transition:"background 0.2s, transform 0.15s",boxShadow:city.trim()?"0 4px 14px rgba(200,75,47,0.35)":"none",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>
-            →
-          </button>
         </div>
       </div>
 
@@ -349,13 +351,12 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
           {coldStartMsg}
         </div>
       )}
-      {/* Customize hint — shown only when city is typed */}
+      {/* Customize hint */}
       {city.trim() && !coldStartMsg && (
-        <div style={{padding:"6px 20px 0",textAlign:"center",animation:"fadeIn 0.3s ease"}}>
-          <span style={{fontSize:11,color:T.inkFaint}}>Instant AI plan → or </span>
+        <div style={{padding:"6px 16px 0",textAlign:"right",animation:"fadeIn 0.3s ease"}}>
           <button onClick={()=>setQuickPlan(city.trim())}
             style={{background:"none",border:"none",fontSize:11,color:T.accent,fontWeight:700,cursor:"pointer",padding:0}}>
-            customize vibes & dates
+            + customize vibes & dates
           </button>
         </div>
       )}
