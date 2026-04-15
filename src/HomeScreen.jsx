@@ -3,7 +3,7 @@ import { T, GLOBAL_CSS, NAV_H, MONTHS_FULL, MONTHS_SHORT, DAYS, CITY_PHOTOS, TRA
 // ── DEV PREVIEW TOGGLE ─────────────────────────────────────
 // Flip to true to preview all Home states without signing in.
 // Set to false (or remove) before shipping.
-const DEV_PREVIEW = true;
+const DEV_PREVIEW = !import.meta.env.PROD && false;
 
 const DEV_PROFILE = {
   name: "Vedant",
