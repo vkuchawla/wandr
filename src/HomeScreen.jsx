@@ -227,7 +227,7 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
 
   const subLine = nextTrip && daysUntil !== null
     ? "Tap your trip to review the plan."
-    : "Set your vibe. AI builds the rest.";
+    : "Search a city. AI builds your perfect trip.";
 
   // Destination grid cities — shuffle deterministically, skip hero city
   const destCities = useMemo(() => {
