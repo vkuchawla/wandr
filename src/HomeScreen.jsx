@@ -246,7 +246,7 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
       <style>{GLOBAL_CSS}</style>
 
       {/* ── 1. Dark header: branding + greeting + search ── */}
-      <div style={{background:`linear-gradient(160deg,#1a1008 0%,${T.ink} 100%)`,padding:"52px 16px 20px",position:"relative",overflow:"hidden"}}>
+      <div style={{background:`linear-gradient(160deg,#1a1008 0%,${T.ink} 100%)`,padding:"52px 16px 20px",position:"relative"}}>
         {/* Subtle warm radial glow */}
         <div style={{position:"absolute",top:0,right:0,width:200,height:200,backgroundImage:"radial-gradient(circle at 100% 0%,rgba(196,154,60,0.1) 0%,transparent 65%)",pointerEvents:"none"}}/>
 
