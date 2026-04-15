@@ -134,6 +134,15 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
     setShowQuickCal(false);
   };
 
+  // Pre-warm backend on first focus so it's awake by the time user hits generate
+  const hasPrewarmed = useRef(false);
+  const handleSearchFocus = () => {
+    if (!hasPrewarmed.current) {
+      hasPrewarmed.current = true;
+      fetch(`${BACKEND}/health`).catch(() => {});
+    }
+  };
+
   const handleCityChange = (val) => {
     setCity(val);
     clearTimeout(autocompleteTimer.current);
@@ -169,7 +178,8 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
     setCity(full);
     setSuggestions([]);
     setShowSuggestions(false);
-    setQuickPlan(full);
+    // Go directly to generation — skip the quick plan sheet
+    onStart(full, "", "");
   };
 
   const fmt   = d => d ? `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}` : null;
@@ -285,9 +295,9 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <div style={{flex:1,position:"relative"}}>
               <input value={city} onChange={e=>handleCityChange(e.target.value)}
-                onKeyDown={e=>{ if(e.key==="Enter"&&city.trim()){ setQuickPlan(city.trim()); setShowSuggestions(false); } }}
+                onKeyDown={e=>{ if(e.key==="Enter"&&city.trim()){ onStart(city.trim(), "", ""); setShowSuggestions(false); } }}
                 onBlur={()=>setTimeout(()=>setShowSuggestions(false),150)}
-                onFocus={()=>suggestions.length>0&&setShowSuggestions(true)}
+                onFocus={()=>{ handleSearchFocus(); suggestions.length>0&&setShowSuggestions(true); }}
                 placeholder="City or destination…"
                 style={{width:"100%",padding:"12px 16px",borderRadius:14,border:`1.5px solid ${city?T.accent:T.dust}`,background:T.cream,color:T.ink,fontSize:14,fontWeight:600,outline:"none",transition:"border-color 0.2s"}}/>
               {(showSuggestions && suggestions.length > 0) || suggestionsLoading ? (
@@ -310,7 +320,7 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
                 </div>
               ) : null}
             </div>
-            <button onClick={()=>{ if(city.trim()){ setQuickPlan(city.trim()); setShowSuggestions(false); }}}
+            <button onClick={()=>{ if(city.trim()){ onStart(city.trim(), "", ""); setShowSuggestions(false); }}}
               style={{flexShrink:0,padding:"12px 18px",borderRadius:14,background:city.trim()?`linear-gradient(135deg,${T.accent},#9b2020)`:T.dust,border:"none",color:"white",fontSize:14,fontWeight:800,cursor:city.trim()?"pointer":"default",transition:"background 0.2s",boxShadow:city.trim()?"0 4px 14px rgba(200,75,47,0.3)":"none"}}>
               →
             </button>
@@ -322,6 +332,16 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
       {coldStartMsg && (
         <div style={{padding:"8px 20px 0",fontSize:12,color:T.inkFaint,textAlign:"center",animation:"fadeIn 0.4s ease"}}>
           {coldStartMsg}
+        </div>
+      )}
+      {/* Customize hint — shown only when city is typed */}
+      {city.trim() && !coldStartMsg && (
+        <div style={{padding:"6px 20px 0",textAlign:"center",animation:"fadeIn 0.3s ease"}}>
+          <span style={{fontSize:11,color:T.inkFaint}}>Instant AI plan → or </span>
+          <button onClick={()=>setQuickPlan(city.trim())}
+            style={{background:"none",border:"none",fontSize:11,color:T.accent,fontWeight:700,cursor:"pointer",padding:0}}>
+            customize vibes & dates
+          </button>
         </div>
       )}
 
@@ -460,7 +480,7 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
           {destCities.map(([c, photo]) => (
             <div
               key={c}
-              onClick={()=>{ setCity(c); setQuickPlan(c); }}
+              onClick={()=>onStart(c, "", "")}
               style={{height:130,borderRadius:16,overflow:"hidden",cursor:"pointer",background:T.ink,position:"relative",boxShadow:"0 3px 12px rgba(28,22,18,0.12)"}}>
               <img
                 src={photo}

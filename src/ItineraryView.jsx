@@ -54,6 +54,7 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
   const [tripSaved, setTripSaved] = useState(false);
   const [savedTripId, setSavedTripId] = useState(preloadedDays?.length ? "preloaded" : null);
   const [showSaveNudge, setShowSaveNudge] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [failedDays, setFailedDays] = useState({}); // dayNum → error string
   const [activeSlot, setActiveSlot] = useState(null); // index of slot user is currently at
   const ratingsKey = `wandr-ratings-${city}-${dates}`;
@@ -75,12 +76,15 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
 
   const cityShort = city?.split(",")[0] || city;
 
+  const ratingCount = Object.keys(ratings).length;
+  const travelDna = profile?.travel_dna;
+
   const LOADING_TIPS = [
     `Asking locals in ${cityShort}…`,
-    "Matching spots to your vibes…",
+    travelDna ? `Tailoring picks for the ${travelDna}…` : "Matching spots to your vibes…",
     "Finding hidden gems off the tourist trail…",
     "Checking neighborhood timing & opening hours…",
-    "Crafting your day's narrative…",
+    ratingCount > 0 ? `Applying your ${ratingCount} place rating${ratingCount > 1 ? "s" : ""}…` : "Crafting your day's narrative…",
     "Picking the must-do moment of the day…",
     "Sourcing the best photo spots…",
     "Curating the perfect pace for you…",
@@ -456,6 +460,22 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
         <div key={loadingTipIdx} style={{fontSize:12,color:"rgba(255,255,255,0.28)",textAlign:"center",maxWidth:220,lineHeight:1.7,fontStyle:"italic",animation:"fadeIn 0.5s ease"}}>
           {LOADING_TIPS[loadingTipIdx]}
         </div>
+
+        {/* Personalization badge */}
+        {(travelDna || ratingCount > 0) && (
+          <div style={{marginTop:20,display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+            {travelDna && (
+              <div style={{fontSize:10,fontWeight:600,letterSpacing:"0.12em",textTransform:"uppercase",color:"rgba(196,154,60,0.55)",background:"rgba(196,154,60,0.08)",padding:"4px 10px",borderRadius:20,border:"1px solid rgba(196,154,60,0.15)"}}>
+                ✦ {travelDna}
+              </div>
+            )}
+            {ratingCount > 0 && (
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.22)",letterSpacing:"0.06em"}}>
+                {ratingCount} rating{ratingCount > 1 ? "s" : ""} applied
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -701,7 +721,34 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
               <button onClick={saveTrip} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:20,padding:"6px 14px",color:tripSaved?T.gold:"rgba(255,255,255,0.6)",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                 {tripSaved ? "✦ Saved" : "♥ Save"}
               </button>
-              <button onClick={()=>setShowShare(true)} style={{background:T.accent,border:"none",borderRadius:20,padding:"6px 14px",color:T.white,fontSize:12,fontWeight:700,cursor:"pointer"}}>Share ↗</button>
+              <button onClick={async ()=>{
+                if (savedTripId && savedTripId !== "preloaded") {
+                  const url = `${window.location.origin}${window.location.pathname}?trip=${savedTripId}`;
+                  navigator.clipboard.writeText(url).catch(()=>{});
+                  setLinkCopied(true);
+                  setTimeout(()=>setLinkCopied(false), 2500);
+                } else if (user) {
+                  // Save first then copy link
+                  await saveTrip();
+                  // Give Supabase a moment to write
+                  setTimeout(async ()=>{
+                    const { data } = await supabase.from("trips").select("id")
+                      .eq("user_id", user.id).eq("city", city).order("saved_at", {ascending:false}).limit(1);
+                    const id = data?.[0]?.id;
+                    if (id) {
+                      const url = `${window.location.origin}${window.location.pathname}?trip=${id}`;
+                      navigator.clipboard.writeText(url).catch(()=>{});
+                      setSavedTripId(id);
+                      setLinkCopied(true);
+                      setTimeout(()=>setLinkCopied(false), 2500);
+                    }
+                  }, 800);
+                } else {
+                  setShowShare(true);
+                }
+              }} style={{background:linkCopied?"#4a7c59":T.accent,border:"none",borderRadius:20,padding:"6px 14px",color:T.white,fontSize:12,fontWeight:700,cursor:"pointer",transition:"background 0.3s"}}>
+                {linkCopied ? "✓ Link copied" : "Share ↗"}
+              </button>
             </div>
           )}
         </div>

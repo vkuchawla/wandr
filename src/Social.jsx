@@ -244,6 +244,23 @@ function TripCard({ trip, user, following, followUser, onRemix, status }) {
   );
 }
 
+// Curated seed trips — shown when Discover feed is sparse
+const _d = (daysAgo) => new Date(Date.now() - daysAgo * 86400000).toISOString();
+const SEED_TRIPS = [
+  { id:"s1", city:"Tokyo, Japan", dates:"May 10 – May 15, 2026", saved_at:_d(1), mood_context:"Day 1: Street food, Cultural\nDay 2: Nightlife\nDay 3: Off the beaten path", days:[{day:1,theme:"Temples, Tsukiji fish market & Shibuya crossing"},{day:2,theme:"Golden Gai jazz bars & ramen at midnight"},{day:3,theme:"Yanaka old town & hidden Shinto shrines"}], profiles:{name:"Maya T.",travel_dna:"The Immersive Explorer"}, user_id:"s-u1", is_public:true },
+  { id:"s2", city:"Barcelona, Spain", dates:"Apr 28 – May 2, 2026", saved_at:_d(2), mood_context:"Day 1: Fine dining\nDay 2: Cultural\nDay 3: Beach, Laid back", days:[{day:1,theme:"Boqueria mornings & rooftop pintxos at dusk"},{day:2,theme:"Gaudí, Gothic Quarter & vermouth hour"},{day:3,theme:"Barceloneta beach & chiringuito sundowners"}], profiles:{name:"Carlos R.",travel_dna:"The Culture Chaser"}, user_id:"s-u2", is_public:true },
+  { id:"s3", city:"New York, USA", dates:"May 5 – May 8, 2026", saved_at:_d(1), mood_context:"Day 1: Street food, Cultural\nDay 2: Nightlife, Fine dining", days:[{day:1,theme:"Lower East Side bagels, the High Line & Chelsea galleries"},{day:2,theme:"West Village dinner crawl & rooftop cocktails"}], profiles:{name:"Jordan K.",travel_dna:"The Foodie Explorer"}, user_id:"s-u3", is_public:true },
+  { id:"s4", city:"Lisbon, Portugal", dates:"Jun 3 – Jun 7, 2026", saved_at:_d(3), mood_context:"Day 1: Cultural, Slow mornings\nDay 2: Off the beaten path\nDay 3: Fine dining", days:[{day:1,theme:"Pastéis de Belém, Alfama tram & fado at sundown"},{day:2,theme:"LX Factory, Mouraria & hidden miradouros"},{day:3,theme:"Wine tasting & long dinner in Chiado"}], profiles:{name:"Sofia L.",travel_dna:"The Slow Traveler"}, user_id:"s-u4", is_public:true },
+  { id:"s5", city:"Kyoto, Japan", dates:"Apr 20 – Apr 24, 2026", saved_at:_d(4), mood_context:"Day 1: Cultural\nDay 2: Off the beaten path\nDay 3: Slow mornings, Cultural", days:[{day:1,theme:"Fushimi Inari at dawn & Gion tea houses"},{day:2,theme:"Arashiyama bamboo & hidden temple trails"},{day:3,theme:"Morning zazen, Nishiki Market & kaiseki dinner"}], profiles:{name:"Emma W.",travel_dna:"The Mindful Wanderer"}, user_id:"s-u5", is_public:true },
+  { id:"s6", city:"New Orleans, USA", dates:"May 18 – May 21, 2026", saved_at:_d(2), mood_context:"Day 1: Street food, Nightlife\nDay 2: Cultural, Street food", days:[{day:1,theme:"Café du Monde beignets, jazz brunch & Frenchmen St at midnight"},{day:2,theme:"Magazine Street, NOMA & crawfish étouffée dinner"}], profiles:{name:"Marcus D.",travel_dna:"The Night Owl"}, user_id:"s-u6", is_public:true },
+  { id:"s7", city:"Marrakech, Morocco", dates:"Jun 10 – Jun 14, 2026", saved_at:_d(1), mood_context:"Day 1: Cultural, Off the beaten path\nDay 2: Street food\nDay 3: Laid back", days:[{day:1,theme:"Djemaa el-Fna at dusk & riad rooftop dinner"},{day:2,theme:"Souks, spice markets & tannery quarter"},{day:3,theme:"Palmeraie sunrise ride & hammam afternoon"}], profiles:{name:"Aisha B.",travel_dna:"The Culture Chaser"}, user_id:"s-u7", is_public:true },
+  { id:"s8", city:"Seoul, South Korea", dates:"May 25 – May 29, 2026", saved_at:_d(3), mood_context:"Day 1: Street food, Cultural\nDay 2: Nightlife\nDay 3: Off the beaten path", days:[{day:1,theme:"Gyeongbokgung Palace, Insadong & KBBQ feast"},{day:2,theme:"Hongdae clubs, pojangmacha & 3am jjajangmyeon"},{day:3,theme:"Bukchon hanok village & hidden makgeolli bars"}], profiles:{name:"Ji-Woo P.",travel_dna:"The Urban Explorer"}, user_id:"s-u8", is_public:true },
+  { id:"s9", city:"Amsterdam, Netherlands", dates:"May 12 – May 15, 2026", saved_at:_d(2), mood_context:"Day 1: Cultural, Slow mornings\nDay 2: Nightlife, Off the beaten path", days:[{day:1,theme:"Rijksmuseum, Jordaan canal walk & jenever tasting"},{day:2,theme:"De Pijp market, Amsterdam Noord & late-night Leidseplein"}], profiles:{name:"Lars V.",travel_dna:"The Laid-Back Traveler"}, user_id:"s-u9", is_public:true },
+  { id:"s10", city:"Cape Town, South Africa", dates:"Jun 20 – Jun 25, 2026", saved_at:_d(4), mood_context:"Day 1: Adventure\nDay 2: Cultural, Fine dining\nDay 3: Laid back, Off the beaten path", days:[{day:1,theme:"Table Mountain hike & Camps Bay sunset cocktails"},{day:2,theme:"Bo-Kaap spice tour & waterfront wine dinner"},{day:3,theme:"Cape Point drive & hidden coves of Simonstown"}], profiles:{name:"Nomvula S.",travel_dna:"The Adventurer"}, user_id:"s-u10", is_public:true },
+  { id:"s11", city:"Nashville, USA", dates:"May 8 – May 11, 2026", saved_at:_d(1), mood_context:"Day 1: Nightlife, Street food\nDay 2: Cultural, Laid back", days:[{day:1,theme:"Hattie B's hot chicken, honky-tonks & Broadway dive bars"},{day:2,theme:"12 South brunch, Centennial Park & rooftop whiskey"}], profiles:{name:"Tyler H.",travel_dna:"The Music Lover"}, user_id:"s-u11", is_public:true },
+  { id:"s12", city:"Mexico City, Mexico", dates:"Jun 5 – Jun 9, 2026", saved_at:_d(2), mood_context:"Day 1: Street food, Cultural\nDay 2: Fine dining\nDay 3: Off the beaten path", days:[{day:1,theme:"Mercado de Jamaica, Frida Kahlo museum & mezcal bar hop"},{day:2,theme:"Pujol tasting menu & Roma Norte wine evening"},{day:3,theme:"Xochimilco chinampas & hidden Coyoacán cafés"}], profiles:{name:"Isabella F.",travel_dna:"The Foodie Explorer"}, user_id:"s-u12", is_public:true },
+];
+
 function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
   const [tab, setTab]           = useState("discover");
   const [feed, setFeed]         = useState([]);
@@ -378,7 +395,11 @@ function SocialScreen({ supabase, user, onRemix, onPlanCity }) {
     return { active, upcoming, past };
   };
 
-  const sourceTrips = tab === "friends" ? feed : discover;
+  const sourceTrips = tab === "friends" ? feed : (
+    discover.length < 5
+      ? [...discover, ...SEED_TRIPS.filter(s => !discover.find(d => d.city?.split(",")[0] === s.city?.split(",")[0]))]
+      : discover
+  );
   const { active: activeTrips, upcoming: upcomingTrips, past: pastTrips } = bucketTrips(sourceTrips);
 
   // Signed-out gate — show nothing personal

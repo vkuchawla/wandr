@@ -3,10 +3,10 @@ import { OnboardingSplash } from "./OnboardingSplash.jsx";
 
 const BACKEND = import.meta.env.VITE_BACKEND || (import.meta.env.PROD ? "https://wandr-62i6.onrender.com" : "");
 
-// Keep Render backend warm — ping on load and every 14 minutes
+// Keep Render backend warm — ping on load and every 5 minutes (Render sleeps after 15 min)
 const pingBackend = () => fetch(`${BACKEND}/health`).catch(()=>{});
 pingBackend();
-setInterval(pingBackend, 14 * 60 * 1000);
+setInterval(pingBackend, 5 * 60 * 1000);
 import { createClient } from "@supabase/supabase-js";
 import { T, GLOBAL_CSS, NAV_H } from "./constants.jsx";
 import { NavBar } from "./NavBar.jsx";
@@ -77,9 +77,24 @@ export default function App() {
       if (screen === "loading") setScreen("home");
     }, 3000);
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       clearTimeout(timeout);
       setUser(session?.user ?? null);
+
+      // Deep link: ?trip=<supabase_trip_id> — open shared itinerary directly
+      const sharedTripId = new URLSearchParams(window.location.search).get("trip");
+      if (sharedTripId) {
+        const { data: sharedTrip } = await supabase.from("trips").select("*").eq("id", sharedTripId).single();
+        if (sharedTrip) {
+          setOpenTrip({ ...sharedTrip, moodContext: sharedTrip.mood_context });
+          setScreen("trip-detail");
+          // Clean the URL without reloading
+          window.history.replaceState({}, "", window.location.pathname);
+          if (session?.user) { loadProfile(session.user.id); loadTrips(session.user.id); }
+          return;
+        }
+      }
+
       if (session?.user) {
         loadProfile(session.user.id);
         loadTrips(session.user.id);
