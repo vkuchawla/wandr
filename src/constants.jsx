@@ -74,7 +74,7 @@ const CARD = {
 };
 
 // Nav bar height constant — used to ensure content isn't hidden behind nav
-const NAV_H = 72;
+const NAV_H = 80;
 
 const FONTS = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300;1,400&display=swap');
@@ -84,10 +84,11 @@ const GLOBAL_CSS = `
   ${FONTS}
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html { font-size: 16px; }
-  body { background: #e8d8c8; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  body { background: #e0d0c0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
   ::-webkit-scrollbar { display: none; }
   input, button, select, textarea { font-family: 'DM Sans', sans-serif; font-size: 1rem; }
-  @keyframes fadeUp   { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
+
+  @keyframes fadeUp   { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:translateY(0) } }
   @keyframes fadeIn   { from { opacity:0 } to { opacity:1 } }
   @keyframes pop      { 0%{transform:scale(1)} 40%{transform:scale(1.14)} 100%{transform:scale(1)} }
   @keyframes pulse    { 0%,100%{opacity:0.4} 50%{opacity:1} }
@@ -96,6 +97,20 @@ const GLOBAL_CSS = `
   @keyframes spin     { to { transform: rotate(360deg) } }
   @keyframes marquee1 { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
   @keyframes marquee2 { 0% { transform: translateX(-50%); } 100% { transform: translateX(0); } }
+  @keyframes scaleIn  { from { opacity:0; transform:scale(0.92) } to { opacity:1; transform:scale(1) } }
+  @keyframes bounceIn { 0%{transform:scale(0.8);opacity:0} 60%{transform:scale(1.06)} 100%{transform:scale(1);opacity:1} }
+  @keyframes cardLift { from{transform:translateY(0)} to{transform:translateY(-3px)} }
+
+  /* Tap/press feedback for interactive elements */
+  .pressable { transition: transform 0.12s ease, box-shadow 0.15s ease; }
+  .pressable:active { transform: scale(0.95) !important; }
+
+  /* Card hover lift */
+  .card-lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+  .card-lift:hover { transform: translateY(-3px); box-shadow: 0 10px 32px rgba(28,22,18,0.18) !important; }
+
+  /* Smooth image load */
+  img { transition: opacity 0.3s ease; }
 `;
 
 // ─────────────────────────────────────────────

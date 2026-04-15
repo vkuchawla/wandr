@@ -246,85 +246,100 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
       <style>{GLOBAL_CSS}</style>
 
       {/* ── 1. Full-bleed hero photo header ── */}
-      <div style={{position:"relative",height:260,overflow:"hidden",background:T.ink}}>
-        {/* Fixed warm aerial travel photo — dark tones work with any city overlay */}
+      <div style={{position:"relative",height:310,overflow:"hidden",background:T.ink}}>
         <img
           src="https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&q=80"
           alt="Travel"
-          style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",objectPosition:"center 40%"}}
+          style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",objectPosition:"center 40%",transform:"scale(1.04)"}}
         />
-        {/* Multi-stop gradient: light at top → dark in middle → pure ink at bottom */}
-        <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.45) 45%, rgba(28,22,18,0.88) 75%, rgba(28,22,18,1) 100%)"}}/>
-        {/* Subtle warm gold tint */}
-        <div style={{position:"absolute",inset:0,backgroundImage:"radial-gradient(circle at 30% 40%,rgba(196,154,60,0.1) 0%,transparent 65%)",pointerEvents:"none"}}/>
+        {/* Deep cinematic gradient */}
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.3) 30%, rgba(18,12,8,0.9) 72%, rgba(18,12,8,1) 100%)"}}/>
+        {/* Warm vignette */}
+        <div style={{position:"absolute",inset:0,backgroundImage:"radial-gradient(ellipse at 50% 110%,rgba(196,154,60,0.14) 0%,transparent 65%)",pointerEvents:"none"}}/>
 
-        {/* Top-left greeting */}
-        <div style={{position:"absolute",top:52,left:20,right:20,zIndex:2}}>
-          {firstName ? (
-            <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.8)",letterSpacing:"0.02em"}}>
-              {timeGreeting}, {firstName} ✦
-            </div>
-          ) : (
-            <div>
-              <div style={{fontSize:13,fontWeight:700,color:"rgba(255,255,255,0.8)",letterSpacing:"0.14em",textTransform:"uppercase",marginBottom:4}}>
-                ✦ WANDR
-              </div>
-              <div style={{fontSize:12,color:"rgba(255,255,255,0.5)",fontStyle:"italic",fontFamily:"'Playfair Display',serif"}}>
-                AI-built itineraries for your travel style.
-              </div>
-            </div>
+        {/* Top status bar */}
+        <div style={{position:"absolute",top:52,left:20,right:20,zIndex:2,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontSize:12,fontWeight:800,letterSpacing:"0.2em",textTransform:"uppercase",color:"rgba(196,154,60,0.8)"}}>✦ WANDR</div>
+          {firstName && (
+            <div style={{fontSize:12,fontWeight:600,color:"rgba(255,255,255,0.55)",letterSpacing:"0.01em"}}>{timeGreeting}, {firstName}</div>
           )}
         </div>
 
-        {/* City name + CTA — positioned high enough to stay above the dark fade zone */}
-        <div style={{position:"absolute",bottom:76,left:20,right:20,zIndex:2,display:"flex",alignItems:"flex-end",justifyContent:"space-between"}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:900,color:"white",lineHeight:1.1,textShadow:"0 2px 16px rgba(0,0,0,0.5)"}}>
-            {heroCity}
+        {/* Large city headline + CTA */}
+        <div style={{position:"absolute",bottom:72,left:20,right:20,zIndex:2}}>
+          {/* Featured tag */}
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.16em",textTransform:"uppercase",color:"rgba(196,154,60,0.7)",marginBottom:8}}>Featured destination</div>
+          <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:12}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:46,fontWeight:900,color:"white",lineHeight:0.95,letterSpacing:"-1px",textShadow:"0 4px 24px rgba(0,0,0,0.4)"}}>
+                {heroCity}
+              </div>
+              <div style={{fontSize:12,color:"rgba(255,255,255,0.38)",marginTop:7,fontStyle:"italic",fontFamily:"'Playfair Display',serif",lineHeight:1.4}}>
+                AI-built for your travel style
+              </div>
+            </div>
+            <button
+              onClick={()=>setQuickPlan(heroCity)}
+              onMouseDown={e=>e.currentTarget.style.transform="scale(0.94)"}
+              onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
+              onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}
+              style={{flexShrink:0,padding:"11px 18px",borderRadius:22,background:`linear-gradient(135deg,${T.accent},#a83520)`,border:"none",color:"white",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:"0 6px 20px rgba(200,75,47,0.55)",whiteSpace:"nowrap",letterSpacing:"0.01em",transition:"transform 0.15s,box-shadow 0.15s"}}>
+              Plan it →
+            </button>
           </div>
-          <button
-            onClick={()=>setQuickPlan(heroCity)}
-            style={{flexShrink:0,padding:"9px 16px",borderRadius:20,background:T.accent,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 14px rgba(200,75,47,0.5)",whiteSpace:"nowrap",marginLeft:12}}>
-            Plan this trip →
-          </button>
         </div>
       </div>
 
-      {/* ── 2. Search bar — floats over the pure-dark gradient zone, no photo clash ── */}
-      <div style={{margin:"0 16px",position:"relative",zIndex:10,marginTop:-52}}>
-        <div style={{background:T.white,borderRadius:20,padding:"16px",boxShadow:"0 4px 20px rgba(28,22,18,0.12)"}}>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <div style={{flex:1,position:"relative"}}>
-              <input value={city} onChange={e=>handleCityChange(e.target.value)}
-                onKeyDown={e=>{ if(e.key==="Enter"&&city.trim()){ onStart(city.trim(), "", ""); setShowSuggestions(false); } }}
-                onBlur={()=>setTimeout(()=>setShowSuggestions(false),150)}
-                onFocus={()=>{ handleSearchFocus(); suggestions.length>0&&setShowSuggestions(true); }}
-                placeholder="City or destination…"
-                style={{width:"100%",padding:"12px 16px",borderRadius:14,border:`1.5px solid ${city?T.accent:T.dust}`,background:T.cream,color:T.ink,fontSize:14,fontWeight:600,outline:"none",transition:"border-color 0.2s"}}/>
-              {(showSuggestions && suggestions.length > 0) || suggestionsLoading ? (
-                <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,right:0,background:T.white,borderRadius:14,boxShadow:"0 8px 24px rgba(28,22,18,0.12)",border:`1px solid ${T.dust}`,zIndex:50,overflow:"hidden"}}>
-                  {suggestionsLoading && suggestions.length === 0 && (
-                    <div style={{padding:"12px 16px",fontSize:13,color:T.inkFaint}}>Searching…</div>
-                  )}
-                  {suggestions.map((s,i)=>(
-                    <button key={i} onMouseDown={()=>selectSuggestion(s)}
-                      style={{width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:10,borderBottom:i<suggestions.length-1?`1px solid ${T.dust}`:"none"}}
-                      onMouseEnter={e=>e.currentTarget.style.background=T.paper}
-                      onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                      <span style={{fontSize:14}}>📍</span>
-                      <div>
-                        <div style={{fontSize:14,fontWeight:700,color:T.ink}}>{s.name}</div>
-                        {s.description&&<div style={{fontSize:12,color:T.inkFaint}}>{s.description}</div>}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            <button onClick={()=>{ if(city.trim()){ onStart(city.trim(), "", ""); setShowSuggestions(false); }}}
-              style={{flexShrink:0,padding:"12px 18px",borderRadius:14,background:city.trim()?`linear-gradient(135deg,${T.accent},#9b2020)`:T.dust,border:"none",color:"white",fontSize:14,fontWeight:800,cursor:city.trim()?"pointer":"default",transition:"background 0.2s",boxShadow:city.trim()?"0 4px 14px rgba(200,75,47,0.3)":"none"}}>
-              →
-            </button>
+      {/* ── 2. Search bar ── */}
+      <div style={{margin:"0 14px",position:"relative",zIndex:10,marginTop:-46}}>
+        <div style={{
+          background:"rgba(255,255,255,0.97)",
+          backdropFilter:"blur(12px)",
+          WebkitBackdropFilter:"blur(12px)",
+          borderRadius:22,
+          padding:"10px 10px 10px 16px",
+          boxShadow:"0 8px 32px rgba(28,22,18,0.18), 0 2px 8px rgba(28,22,18,0.08)",
+          display:"flex",gap:8,alignItems:"center",
+          border:"1px solid rgba(255,255,255,0.6)",
+        }}>
+          {/* Search icon */}
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={city ? T.accent : T.inkFaint} strokeWidth="2.5" strokeLinecap="round" style={{flexShrink:0,transition:"stroke 0.2s"}}>
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <div style={{flex:1,position:"relative"}}>
+            <input value={city} onChange={e=>handleCityChange(e.target.value)}
+              onKeyDown={e=>{ if(e.key==="Enter"&&city.trim()){ onStart(city.trim(), "", ""); setShowSuggestions(false); } }}
+              onBlur={()=>setTimeout(()=>setShowSuggestions(false),150)}
+              onFocus={()=>{ handleSearchFocus(); suggestions.length>0&&setShowSuggestions(true); }}
+              placeholder="Where to next?"
+              style={{width:"100%",padding:"8px 0",border:"none",background:"transparent",color:T.ink,fontSize:15,fontWeight:600,outline:"none",fontFamily:"'DM Sans',sans-serif"}}/>
+            {(showSuggestions && suggestions.length > 0) || suggestionsLoading ? (
+              <div style={{position:"absolute",top:"calc(100% + 10px)",left:-16,right:0,background:T.white,borderRadius:18,boxShadow:"0 12px 40px rgba(28,22,18,0.15)",border:`1px solid ${T.dust}`,zIndex:50,overflow:"hidden"}}>
+                {suggestionsLoading && suggestions.length === 0 && (
+                  <div style={{padding:"14px 18px",fontSize:13,color:T.inkFaint}}>Searching…</div>
+                )}
+                {suggestions.map((s,i)=>(
+                  <button key={i} onMouseDown={()=>selectSuggestion(s)}
+                    style={{width:"100%",padding:"13px 18px",background:"none",border:"none",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:12,borderBottom:i<suggestions.length-1?`1px solid ${T.dust}`:"none"}}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.paper}
+                    onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                    <div style={{width:32,height:32,borderRadius:10,background:T.cream,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>📍</div>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:700,color:T.ink}}>{s.name}</div>
+                      {s.description&&<div style={{fontSize:12,color:T.inkFaint,marginTop:1}}>{s.description}</div>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
+          <button onClick={()=>{ if(city.trim()){ onStart(city.trim(), "", ""); setShowSuggestions(false); }}}
+            onMouseDown={e=>city.trim()&&(e.currentTarget.style.transform="scale(0.92)")}
+            onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
+            onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}
+            style={{flexShrink:0,width:42,height:42,borderRadius:14,background:city.trim()?`linear-gradient(135deg,${T.accent},#9b2020)`:"#ede5db",border:"none",color:city.trim()?"white":"#c0b09a",fontSize:18,fontWeight:900,cursor:city.trim()?"pointer":"default",transition:"background 0.2s, transform 0.15s",boxShadow:city.trim()?"0 4px 14px rgba(200,75,47,0.35)":"none",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>
+            →
+          </button>
         </div>
       </div>
 
@@ -346,17 +361,27 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
       )}
 
       {/* ── 3. Quick mood row ── */}
-      <div style={{padding:"16px 0 0"}}>
-        <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:T.inkFaint,marginBottom:10,paddingLeft:16}}>
+      <div style={{padding:"20px 0 0"}}>
+        <div style={{fontSize:10,fontWeight:800,letterSpacing:"0.18em",textTransform:"uppercase",color:T.inkFaint,marginBottom:12,paddingLeft:16}}>
           What's the vibe?
         </div>
-        <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,paddingLeft:16,paddingRight:24,scrollbarWidth:"none",msOverflowStyle:"none"}}>
+        <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:6,paddingLeft:16,paddingRight:24,scrollbarWidth:"none",msOverflowStyle:"none"}}>
           {QUICK_VIBES.map(v => (
             <button
               key={v.id}
               onClick={()=>{ setQuickVibes([v.id]); setQuickPlan(heroCity); }}
-              style={{flexShrink:0,display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:20,background:T.white,border:`1.5px solid ${T.dust}`,color:T.ink,fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
-              <span>{v.emoji}</span>
+              onMouseDown={e=>e.currentTarget.style.transform="scale(0.93)"}
+              onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
+              onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}
+              style={{
+                flexShrink:0, display:"flex", alignItems:"center", gap:7,
+                padding:"9px 16px", borderRadius:22,
+                background:T.white, border:`1.5px solid ${T.dust}`,
+                color:T.ink, fontSize:13, fontWeight:600, cursor:"pointer",
+                whiteSpace:"nowrap", boxShadow:"0 2px 8px rgba(28,22,18,0.06)",
+                transition:"transform 0.12s ease, box-shadow 0.15s ease",
+              }}>
+              <span style={{fontSize:15}}>{v.emoji}</span>
               {v.label}
             </button>
           ))}
@@ -472,27 +497,42 @@ function HomeScreen({ onStart, savedTrips, profile, onOpenTrip, supabase, user, 
       )}
 
       {/* ── 6. Destinations discovery grid — always visible ── */}
-      <div style={{padding:"20px 16px 0"}}>
-        <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",color:T.inkFaint,marginBottom:12}}>
-          Explore the world
+      <div style={{padding:"24px 16px 0"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <div style={{fontSize:10,fontWeight:800,letterSpacing:"0.18em",textTransform:"uppercase",color:T.inkFaint}}>Explore the world</div>
         </div>
+        {/* Large hero card — first city */}
+        {destCities[0] && (() => {
+          const [c, photo] = destCities[0];
+          return (
+            <div onClick={()=>onStart(c,"","")}
+              onMouseDown={e=>e.currentTarget.style.transform="scale(0.985)"}
+              onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
+              onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}
+              style={{height:200,borderRadius:22,overflow:"hidden",cursor:"pointer",background:T.ink,position:"relative",boxShadow:"0 6px 24px rgba(28,22,18,0.2)",marginBottom:10,transition:"transform 0.18s ease,box-shadow 0.18s ease"}}>
+              <img src={photo} alt={c} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.75}} onError={e=>e.target.style.display="none"}/>
+              <div style={{position:"absolute",inset:0,background:"linear-gradient(160deg,rgba(0,0,0,0.1) 0%,rgba(0,0,0,0.65) 100%)"}}/>
+              <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"18px 18px"}}>
+                <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",color:"rgba(255,255,255,0.5)",marginBottom:4}}>Plan a trip</div>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:900,color:"white",lineHeight:1.0,letterSpacing:"-0.5px",textShadow:"0 2px 12px rgba(0,0,0,0.4)"}}>{c}</div>
+              </div>
+            </div>
+          );
+        })()}
+        {/* Remaining cities — 2 col */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          {destCities.map(([c, photo]) => (
+          {destCities.slice(1).map(([c, photo]) => (
             <div
               key={c}
               onClick={()=>onStart(c, "", "")}
-              style={{height:130,borderRadius:16,overflow:"hidden",cursor:"pointer",background:T.ink,position:"relative",boxShadow:"0 3px 12px rgba(28,22,18,0.12)"}}>
-              <img
-                src={photo}
-                alt={c}
-                style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.6}}
-                onError={e=>e.target.style.display="none"}
-              />
-              <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,transparent 30%,rgba(0,0,0,0.72) 100%)"}}/>
-              <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"10px 12px"}}>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:"white",lineHeight:1.2,textShadow:"0 1px 6px rgba(0,0,0,0.5)"}}>
-                  {c}
-                </div>
+              onMouseDown={e=>e.currentTarget.style.transform="scale(0.96)"}
+              onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
+              onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}
+              style={{height:148,borderRadius:18,overflow:"hidden",cursor:"pointer",background:T.ink,position:"relative",boxShadow:"0 3px 14px rgba(28,22,18,0.13)",transition:"transform 0.15s ease"}}>
+              <img src={photo} alt={c} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.65}} onError={e=>e.target.style.display="none"}/>
+              <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,transparent 20%,rgba(0,0,0,0.75) 100%)"}}/>
+              <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"11px 13px"}}>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:800,color:"white",lineHeight:1.15,textShadow:"0 1px 8px rgba(0,0,0,0.5)"}}>{c}</div>
               </div>
             </div>
           ))}
