@@ -33,12 +33,23 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqdXR0dGpqcHRta2h5cXhveXRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NTA4MzgsImV4cCI6MjA4OTAyNjgzOH0.kac5jh8nTs_IoruG2GlNkGWpRWZsyw_XcUj0hQmcdZ4"
 );
 
+// Screens that can be safely restored on reload
+const RESTORABLE = new Set(["home","explore","social","saved","profile","itinerary","trip-detail","city","mood"]);
+
+// Read persisted nav state from sessionStorage
+const readSession = () => {
+  try { return JSON.parse(sessionStorage.getItem("wandr-nav") || "null"); } catch { return null; }
+};
+const writeSession = (state) => {
+  try { sessionStorage.setItem("wandr-nav", JSON.stringify(state)); } catch {}
+};
+
 export default function App() {
   const [screen, setScreen]         = useState("loading");
-  const [city, setCity]             = useState("");
-  const [dates, setDates]           = useState("");
-  const [moodContext, setMoodContext] = useState("");
-  const [homeBase, setHomeBase]     = useState("");
+  const [city, setCity]             = useState(() => readSession()?.city || "");
+  const [dates, setDates]           = useState(() => readSession()?.dates || "");
+  const [moodContext, setMoodContext] = useState(() => readSession()?.moodContext || "");
+  const [homeBase, setHomeBase]     = useState(() => readSession()?.homeBase || "");
   const [savedTrips, setSavedTrips] = useState(() => {
     try { return JSON.parse(localStorage.getItem("wandr_trips") || "[]"); } catch(e) { return []; }
   });
@@ -48,11 +59,17 @@ export default function App() {
     try { localStorage.setItem("wandr_trips", JSON.stringify(savedTrips)); } catch(e) {}
   }, [savedTrips]);
   const [profile, setProfile]       = useState(null);
-  const [openTrip, setOpenTrip]       = useState(null);
+  const [openTrip, setOpenTrip]       = useState(() => readSession()?.openTrip || null);
   const [generatedDays, setGeneratedDays] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [user, setUser]             = useState(null);
   const [authGate, setAuthGate]     = useState(null); // null | "save" | "social"
+
+  // Persist nav context to sessionStorage whenever it changes
+  useEffect(() => {
+    if (screen === "loading" || screen === "splash" || screen === "auth" || screen === "onboarding") return;
+    writeSession({ screen, city, dates, moodContext, homeBase, openTrip });
+  }, [screen, city, dates, moodContext, homeBase, openTrip]);
 
   // Auth state listener
   useEffect(() => {
@@ -75,9 +92,14 @@ export default function App() {
           localStorage.setItem("wandr_trips", JSON.stringify(anonOnly));
           setSavedTrips(anonOnly);
         } catch(e) {}
-        // Show splash for new users, unless they've seen it before
+        // Restore last screen or show splash for new users
+        const saved = readSession();
         const seen = localStorage.getItem("wandr-seen-splash");
-        setScreen(prev => prev === "loading" ? (seen ? "home" : "splash") : prev);
+        if (saved?.screen && RESTORABLE.has(saved.screen)) {
+          setScreen(prev => prev === "loading" ? saved.screen : prev);
+        } else {
+          setScreen(prev => prev === "loading" ? (seen ? "home" : "splash") : prev);
+        }
       }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -91,6 +113,7 @@ export default function App() {
         setProfile(null);
         setOpenTrip(null);
         try { localStorage.removeItem("wandr_trips"); } catch(e) {}
+        try { sessionStorage.removeItem("wandr-nav"); } catch(e) {}
         setRefreshKey(k => k + 1); // force HomeScreen community feed to re-fetch without user
       }
     });
@@ -101,8 +124,12 @@ export default function App() {
     const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
     if (data) {
       setProfile({ name: data.name, answers: data.answers, travelDna: data.travel_dna });
-      // Only navigate to home if on a loading/auth screen
-      setScreen(prev => ["loading","auth","onboarding"].includes(prev) ? "home" : prev);
+      // Restore last screen if available, otherwise go home
+      setScreen(prev => {
+        if (!["loading","auth","onboarding"].includes(prev)) return prev;
+        const saved = readSession();
+        return (saved?.screen && RESTORABLE.has(saved.screen)) ? saved.screen : "home";
+      });
     } else {
       setScreen("onboarding");
     }
