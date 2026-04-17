@@ -385,8 +385,6 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
   };
 
   const BUCKET_COLORS = {morning:"#c49a3c",afternoon:"#4a7c59",evening:"#8b1a2f"};
-  const TRANSIT_ICONS = { walk:"🚶", subway:"🚇", taxi:"🚕", bus:"🚌", tram:"🚊", "tuk-tuk":"🛺", ferry:"🚢", bike:"🚲", car:"🚗" };
-  const TRANSIT_COLORS = { walk:"#4a7c59", subway:"#1e6b8a", taxi:"#c49a3c", bus:"#5a2d82", tram:"#255c3f", "tuk-tuk":"#b5600a", ferry:"#1a3a6b", bike:"#4a7c59", car:"#555" };
   const getBucket = t => {
     if (!t) return "morning";
     const h=parseInt(t.split(":")[0]); const pm=t.toLowerCase().includes("pm");
@@ -1093,30 +1091,52 @@ function PlanMode({ day, activeDay, ratings, BUCKET_COLORS, getBucket, TRANSIT_I
       (slot.is_meal ? "🍽" : slot.highlight ? "★" : "📍");
   };
 
+  // Format time compactly: "9:00 AM" → "9:00a", "2:30 PM" → "2:30p"
+  const compactTime = (t) => {
+    if (!t) return "";
+    const m = t.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!m) return t;
+    return `${m[1]}:${m[2]}${m[3].toUpperCase()==="AM"?"a":"p"}`;
+  };
+
+  // Count issues for the day header
+  const issueCount = localSlots.filter(s => s.hours_warning || s.confidence === "unverified").length;
+
   return (
-    <div style={{padding:"12px 16px",paddingBottom:NAV_H+80}}>
-      {/* Header */}
-      <div style={{marginBottom:16}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-          <div style={{fontSize:10,fontWeight:700,color:T.gold,textTransform:"uppercase",letterSpacing:"0.12em"}}>Day {day?.day}</div>
-          {swapIdx !== null && (
-            <div style={{background:`${T.sage}15`,borderRadius:8,padding:"3px 8px",fontSize:10,color:T.sage,fontWeight:700}}>
-              Tap a stop to swap ↕
+    <div style={{padding:"14px 16px",paddingBottom:NAV_H+80}}>
+      {/* Day header strip */}
+      <div style={{marginBottom:18,padding:"14px 16px",borderRadius:16,background:T.white,border:`1px solid ${T.dust}`,boxShadow:"0 2px 8px rgba(28,22,18,0.04)"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <div style={{fontSize:10,fontWeight:800,color:T.gold,textTransform:"uppercase",letterSpacing:"0.14em"}}>Day {day?.day}</div>
+            <span style={{fontSize:10,color:T.inkFaint}}>·</span>
+            <div style={{fontSize:11,color:T.inkLight,fontWeight:600}}>{localSlots.length} stop{localSlots.length===1?"":"s"}</div>
+          </div>
+          {issueCount > 0 && (
+            <div style={{display:"flex",alignItems:"center",gap:4,background:"rgba(200,75,47,0.1)",border:"1px solid rgba(200,75,47,0.2)",borderRadius:999,padding:"3px 9px",fontSize:10,color:"#c84b2f",fontWeight:700}}>
+              <span>⚠</span><span>{issueCount} to confirm</span>
             </div>
           )}
         </div>
-        <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,fontStyle:"italic",color:T.ink}}>{day?.theme}</div>
+        {day?.theme && <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontStyle:"italic",color:T.ink,lineHeight:1.3}}>{day.theme}</div>}
+        {swapIdx !== null && (
+          <div style={{marginTop:10,background:`${T.sage}12`,borderRadius:10,padding:"7px 10px",fontSize:11,color:T.sage,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
+            <span>↕</span><span>Tap another stop to swap times</span>
+            <button onClick={(e)=>{e.stopPropagation();setSwapIdx(null);}} style={{marginLeft:"auto",background:"none",border:"none",color:T.sage,fontSize:11,fontWeight:700,cursor:"pointer"}}>Cancel</button>
+          </div>
+        )}
         {error && (
-          <div style={{marginTop:8,background:"rgba(200,75,47,0.07)",border:"1px solid rgba(200,75,47,0.2)",borderRadius:10,padding:"8px 12px",fontSize:11,color:"#c84b2f",display:"flex",gap:6}}>
-            <span>🚫</span><span>{error}</span>
+          <div style={{marginTop:8,background:"rgba(200,75,47,0.08)",border:"1px solid rgba(200,75,47,0.22)",borderRadius:10,padding:"8px 12px",fontSize:11,color:"#c84b2f",display:"flex",gap:6,alignItems:"flex-start"}}>
+            <span>🚫</span><span style={{flex:1}}>{error}</span>
+            <button onClick={()=>setError(null)} style={{background:"none",border:"none",color:"#c84b2f",cursor:"pointer",fontSize:12,opacity:0.7}}>×</button>
           </div>
         )}
       </div>
 
-      {/* Timeline */}
+      {/* Compact schedule */}
       <div style={{position:"relative"}}>
-        {/* Vertical line */}
-        <div style={{position:"absolute",left:46,top:20,bottom:20,width:1.5,background:T.dust,zIndex:0}}/>
+        {/* Vertical rail */}
+        <div style={{position:"absolute",left:52,top:8,bottom:8,width:2,background:T.dust,borderRadius:1,zIndex:0}}/>
 
         {localSlots.map((slot, i) => {
           const bc = BUCKET_COLORS[getBucket(slot.time)] || T.gold;
@@ -1127,87 +1147,103 @@ function PlanMode({ day, activeDay, ratings, BUCKET_COLORS, getBucket, TRANSIT_I
           const isEditingTime = editingTimeIdx === i;
           const nextSlot = localSlots[i + 1];
           const mode = nextSlot?.transit_mode || "walk";
+          const mins = nextSlot?.transit_from_prev?.match(/\d+/)?.[0];
           const catIcon = getCategoryIcon(slot);
+          const ratingColor = isCompleted ? (rating>=9?"#22c55e":rating>=7?"#84cc16":rating>=5?"#eab308":rating>=3?"#f97316":"#ef4444") : null;
 
           return (
-            <div key={`${slot.name}-${i}`} style={{position:"relative",marginBottom:2}}>
-              <div style={{display:"flex",alignItems:"flex-start",gap:0}}>
-                {/* Left: time column */}
-                <div style={{width:46,flexShrink:0,paddingTop:14,paddingRight:6,textAlign:"right",position:"relative",zIndex:1}}>
-                  <div
+            <div key={`${slot.name}-${i}`} style={{position:"relative"}}>
+              {/* Row */}
+              <div style={{display:"flex",alignItems:"stretch",gap:0,marginBottom:isEditingTime?0:2}}>
+                {/* Time rail */}
+                <div style={{width:48,flexShrink:0,paddingTop:14,paddingRight:6,textAlign:"right",position:"relative",zIndex:1}}>
+                  <button
                     onClick={(e)=>{e.stopPropagation();setSwapIdx(null);setEditingTimeIdx(isEditingTime?null:i);}}
-                    style={{cursor:"pointer",display:"inline-block"}}>
-                    <div style={{fontSize:10,fontWeight:800,color:isEditingTime?T.accent:bc,lineHeight:1.1}}>{slot.time?.replace(" ","")}</div>
-                  </div>
+                    aria-label={`Edit time for ${slot.name}`}
+                    style={{background:"none",border:"none",padding:0,cursor:"pointer",display:"inline-block",fontSize:12,fontWeight:800,color:isEditingTime?T.accent:bc,lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>
+                    {compactTime(slot.time)}
+                  </button>
                 </div>
 
-                {/* Circle on timeline */}
-                <div style={{
-                  width:14,height:14,borderRadius:"50%",flexShrink:0,marginTop:13,
-                  background: isCompleted ? T.sage : isSwapSelected ? T.sage : slot.highlight ? T.gold : bc,
-                  border:`2px solid ${T.cream}`,
-                  zIndex:1,position:"relative",
-                  boxShadow:`0 0 0 2px ${isSwapSelected?T.sage:slot.highlight?T.gold:bc}30`,
-                  transition:"all 0.2s"
-                }}/>
+                {/* Dot on rail */}
+                <div style={{width:14,flexShrink:0,display:"flex",justifyContent:"center",paddingTop:15,position:"relative",zIndex:1}}>
+                  <div style={{
+                    width:12,height:12,borderRadius:"50%",
+                    background: ratingColor || (isSwapSelected ? T.sage : slot.highlight ? T.gold : bc),
+                    border:`2px solid ${T.cream}`,
+                    boxShadow:`0 0 0 2px ${(ratingColor||(isSwapSelected?T.sage:slot.highlight?T.gold:bc))}30`,
+                    transition:"all 0.15s"
+                  }}/>
+                </div>
 
-                {/* Right: card */}
-                <div style={{flex:1,marginLeft:10,marginBottom:8}}>
+                {/* Card */}
+                <div style={{flex:1,marginLeft:10,marginBottom:6}}>
                   <div
                     onClick={()=>handleSwap(i)}
                     style={{
                       background: isSwapSelected ? `${T.sage}12` : isSwapTarget ? `${T.gold}08` : isCompleted ? "#f8f6f3" : T.white,
                       borderRadius:14,
-                      padding:"11px 13px",
+                      padding:"11px 12px",
                       border:`1.5px solid ${isSwapSelected ? T.sage : isSwapTarget ? `${T.gold}60` : isEditingTime ? bc : T.dust}`,
-                      boxShadow: isSwapSelected ? `0 0 0 2px ${T.sage}20` : "0 2px 8px rgba(28,22,18,0.05)",
+                      boxShadow: isSwapSelected ? `0 0 0 3px ${T.sage}22` : "0 2px 6px rgba(28,22,18,0.04)",
                       cursor:"pointer",
                       transition:"all 0.15s",
+                      minHeight:52,
                     }}>
-                    <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
                       {/* Category icon */}
-                      <div style={{fontSize:16,lineHeight:1,marginTop:1,flexShrink:0,opacity:isCompleted?0.5:1}}>{catIcon}</div>
+                      <div style={{fontSize:18,lineHeight:1,flexShrink:0,opacity:isCompleted?0.5:1,width:22,textAlign:"center"}}>{catIcon}</div>
 
                       {/* Content */}
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
-                          <div style={{fontSize:13,fontWeight:700,color:isCompleted?T.inkFaint:T.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>
-                            {slot.name}
-                          </div>
-                          {slot.highlight && !isCompleted && <span style={{fontSize:9,fontWeight:700,color:T.gold,background:`${T.gold}15`,borderRadius:6,padding:"2px 5px",flexShrink:0}}>Top pick</span>}
-                          {isCompleted && (() => { const c=rating>=9?"#22c55e":rating>=7?"#84cc16":rating>=5?"#eab308":rating>=3?"#f97316":"#ef4444"; return <div style={{width:22,height:22,borderRadius:"50%",background:c,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:900,color:"white"}}>{rating}</span></div>; })()}
+                        <div style={{fontSize:14,fontWeight:700,color:isCompleted?T.inkFaint:T.ink,lineHeight:1.25,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:isCompleted?"line-through":"none",textDecorationColor:T.inkFaint}}>
+                          {slot.name}
                         </div>
-                        <div style={{fontSize:10,color:T.inkFaint,display:"flex",alignItems:"center",gap:8}}>
-                          <span>📍 {slot.neighborhood}</span>
-                          {slot.price && <span style={{color:T.inkFaint}}>{slot.price}</span>}
-                          {slot.end_time && <span style={{color:T.inkFaint}}>until {slot.end_time?.replace(" ","")}</span>}
+                        <div style={{fontSize:11,color:T.inkFaint,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          {slot.neighborhood}
+                          {slot.category && <> · <span style={{textTransform:"capitalize"}}>{slot.category}</span></>}
+                          {slot.highlight && <> · <span style={{color:T.gold,fontWeight:700}}>★ Must-do</span></>}
                         </div>
-                        {slot.confidence === "unverified" && <div style={{fontSize:9,color:"#c84b2f",marginTop:3,display:"flex",gap:3}}><span>⚠️</span><span>Confirm before visiting</span></div>}
-                        {slot.hours_warning && <div style={{fontSize:9,color:"#c84b2f",marginTop:3,display:"flex",gap:3}}><span>⚠️</span><span>{slot.hours_warning}</span></div>}
                       </div>
 
-                      {/* Move arrows */}
-                      <div style={{display:"flex",flexDirection:"column",gap:2,flexShrink:0,opacity:0.4}}>
-                        <button onClick={(e)=>{e.stopPropagation();setSwapIdx(null);moveCard(i,-1);}} disabled={i===0}
-                          style={{width:20,height:20,borderRadius:6,border:`1px solid ${T.dust}`,background:"none",color:i===0?T.dust:T.inkLight,fontSize:10,cursor:i===0?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>↑</button>
-                        <button onClick={(e)=>{e.stopPropagation();setSwapIdx(null);moveCard(i,1);}} disabled={i===localSlots.length-1}
-                          style={{width:20,height:20,borderRadius:6,border:`1px solid ${T.dust}`,background:"none",color:i===localSlots.length-1?T.dust:T.inkLight,fontSize:10,cursor:i===localSlots.length-1?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>↓</button>
-                      </div>
+                      {/* Right trailing — rating or reorder */}
+                      {isCompleted && ratingColor ? (
+                        <div style={{width:28,height:28,borderRadius:"50%",background:ratingColor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:`0 2px 6px ${ratingColor}55`}}>
+                          <span style={{fontSize:12,fontWeight:900,color:"white"}}>{rating}</span>
+                        </div>
+                      ) : (
+                        <div style={{display:"flex",flexDirection:"column",gap:2,flexShrink:0}}>
+                          <button onClick={(e)=>{e.stopPropagation();setSwapIdx(null);moveCard(i,-1);}} disabled={i===0}
+                            aria-label="Move earlier"
+                            style={{width:22,height:20,borderRadius:6,border:`1px solid ${T.dust}`,background:T.white,color:i===0?T.dust:T.inkLight,fontSize:11,cursor:i===0?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>↑</button>
+                          <button onClick={(e)=>{e.stopPropagation();setSwapIdx(null);moveCard(i,1);}} disabled={i===localSlots.length-1}
+                            aria-label="Move later"
+                            style={{width:22,height:20,borderRadius:6,border:`1px solid ${T.dust}`,background:T.white,color:i===localSlots.length-1?T.dust:T.inkLight,fontSize:11,cursor:i===localSlots.length-1?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>↓</button>
+                        </div>
+                      )}
                     </div>
+
+                    {/* Inline warning (only for issues) */}
+                    {(slot.hours_warning || slot.confidence === "unverified") && !isCompleted && (
+                      <div style={{marginTop:8,paddingTop:8,borderTop:"1px dashed rgba(200,75,47,0.25)",fontSize:11,color:"#c84b2f",display:"flex",gap:6,alignItems:"center"}}>
+                        <span>⚠</span>
+                        <span style={{flex:1}}>{slot.hours_warning || "Confirm before visiting"}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Time editor */}
                   {isEditingTime && (
-                    <div style={{background:T.paper,borderRadius:12,padding:"12px 13px",marginTop:4,border:`1px solid ${bc}30`,animation:"fadeUp 0.15s ease"}}>
+                    <div style={{background:T.paper,borderRadius:12,padding:"12px 13px",marginTop:6,marginBottom:8,border:`1px solid ${bc}40`,animation:"fadeUp 0.15s ease"}}>
                       {slot.opening_hours?.length > 0 && (
-                        <div style={{fontSize:10,color:T.sage,marginBottom:8,display:"flex",gap:4}}>
+                        <div style={{fontSize:10,color:T.sage,marginBottom:8,display:"flex",gap:4,fontWeight:600}}>
                           <span>🕐</span><span>{slot.opening_hours[new Date().getDay()===0?6:new Date().getDay()-1]}</span>
                         </div>
                       )}
-                      <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                      <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
                         <div>
-                          <div style={{fontSize:10,color:T.inkFaint,marginBottom:5,fontWeight:600}}>Start time</div>
-                          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                          <div style={{fontSize:10,color:T.inkFaint,marginBottom:5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>Start</div>
+                          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                             {[-60,-30,-15,15,30,60].map(d=>(
                               <button key={d} onClick={(e)=>{e.stopPropagation();adjustTime(i,'time',d);}}
                                 style={{padding:"5px 8px",borderRadius:8,background:d<0?"#fef2f2":"#f0faf5",border:`1px solid ${d<0?"#fcc":"#b8e0c8"}`,color:d<0?"#c84b2f":T.sage,fontSize:11,fontWeight:700,cursor:"pointer"}}>
@@ -1217,8 +1253,8 @@ function PlanMode({ day, activeDay, ratings, BUCKET_COLORS, getBucket, TRANSIT_I
                           </div>
                         </div>
                         <div>
-                          <div style={{fontSize:10,color:T.inkFaint,marginBottom:5,fontWeight:600}}>Duration</div>
-                          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                          <div style={{fontSize:10,color:T.inkFaint,marginBottom:5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>Duration</div>
+                          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                             {[-30,-15,15,30,60].map(d=>(
                               <button key={d} onClick={(e)=>{e.stopPropagation();adjustTime(i,'end_time',d);}}
                                 style={{padding:"5px 8px",borderRadius:8,background:d<0?"#fef2f2":"#f0faf5",border:`1px solid ${d<0?"#fcc":"#b8e0c8"}`,color:d<0?"#c84b2f":T.sage,fontSize:11,fontWeight:700,cursor:"pointer"}}>
@@ -1229,7 +1265,7 @@ function PlanMode({ day, activeDay, ratings, BUCKET_COLORS, getBucket, TRANSIT_I
                         </div>
                       </div>
                       <button onClick={(e)=>{e.stopPropagation();setEditingTimeIdx(null);}}
-                        style={{marginTop:8,padding:"5px 12px",borderRadius:8,background:T.ink,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                        style={{marginTop:10,padding:"6px 14px",borderRadius:8,background:T.ink,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>
                         Done
                       </button>
                     </div>
@@ -1237,12 +1273,12 @@ function PlanMode({ day, activeDay, ratings, BUCKET_COLORS, getBucket, TRANSIT_I
                 </div>
               </div>
 
-              {/* Transit connector */}
-              {nextSlot && (
-                <div style={{display:"flex",alignItems:"center",gap:6,paddingLeft:68,marginBottom:4,marginTop:-4}}>
-                  <span style={{fontSize:13,opacity:0.6}}>{TRANSIT_ICONS[mode]||"🚶"}</span>
-                  <span style={{fontSize:10,color:TRANSIT_COLORS[mode]||T.inkFaint,fontWeight:600}}>
-                    {nextSlot.transit_from_prev||(mode==="walk"?"5 min walk":"10 min")}
+              {/* Transit connector — minimal */}
+              {nextSlot && !isEditingTime && (
+                <div style={{display:"flex",alignItems:"center",gap:6,paddingLeft:74,marginBottom:4,marginTop:-2}}>
+                  <span style={{fontSize:12,opacity:0.65}}>{TRANSIT_ICONS[mode]||"🚶"}</span>
+                  <span style={{fontSize:10,color:T.inkFaint,fontWeight:600}}>
+                    {mins ? `${mins} min` : (nextSlot.transit_from_prev||"")}
                   </span>
                 </div>
               )}

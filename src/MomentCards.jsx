@@ -80,12 +80,15 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
   };
 
   const [photoLoaded, setPhotoLoaded] = useState(false);
+  const [tipOpen, setTipOpen] = useState(false);
   const [showSwipeHint, setShowSwipeHint] = useState(() => {
     return !localStorage.getItem("wandr-seen-swipe") && slots.length > 1;
   });
 
   // Reset photo load state when slot changes
-  useEffect(() => { setPhotoLoaded(false); }, [activeSlotIdx]);
+  useEffect(() => { setPhotoLoaded(false); setTipOpen(false); }, [activeSlotIdx]);
+  // Clamp active slot when switching days so we never render a blank slot
+  useEffect(() => { setActiveSlotIdx(0); }, [activeDay]);
   const touchStartX = useRef(null);
   const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
   const handleTouchEnd = (e) => {
@@ -122,7 +125,7 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
   if (!slot) return null;
 
   return (
-    <div style={{padding:"12px 16px 0"}}>
+    <div style={{padding:"12px 16px 0",position:"relative"}}>
       {/* Main moment card */}
       <div
         onTouchStart={handleTouchStart}
@@ -130,203 +133,135 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
         style={{borderRadius:24,overflow:"hidden",boxShadow:"0 12px 40px rgba(28,22,18,0.15)",marginBottom:12,minHeight:480,display:"flex",flexDirection:"column",position:"relative",background:cardBg,cursor:"pointer"}}
         onClick={()=>setSelectedPlace({name:slot.name,category:slot.category})}>
 
-        {/* Hero — photo or rich gradient */}
-        {slot.photo ? (
-          <div style={{position:"relative",height:280,flexShrink:0}}>
-            {/* Shimmer while photo loads */}
-            {!photoLoaded && (
-              <div style={{
-                position:"absolute",inset:0,
-                background:`linear-gradient(90deg,${cardBg} 0%,rgba(255,255,255,0.05) 50%,${cardBg} 100%)`,
-                backgroundSize:"200% 100%",
-                animation:"shimmer 1.5s ease infinite"
-              }}/>
-            )}
-            <img
-              src={slot.photo}
-              alt={slot.name}
-              onLoad={() => setPhotoLoaded(true)}
-              onError={e => { e.target.style.display="none"; setPhotoLoaded(true); }}
-              style={{width:"100%",height:"100%",objectFit:"cover",opacity:photoLoaded?1:0,transition:"opacity 0.4s ease"}}
-            />
-            <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.15) 0%,transparent 35%,rgba(28,22,18,0.85) 100%)"}}/>
-            {/* Top bar — full width */}
-            <div style={{position:"absolute",top:0,left:0,right:0,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={e=>e.stopPropagation()}>
-              <div/>{/* spacer */}
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                {slot.highlight&&<span style={{background:T.gold,color:"white",fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:12}}>★ Must-do</span>}
-                {slot.price&&<span style={{background:"rgba(0,0,0,0.45)",backdropFilter:"blur(8px)",color:"white",fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:12}}>{slot.price}</span>}
-                <button onClick={openTimeEdit} style={{background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)",border:"1.5px dashed rgba(255,255,255,0.5)",color:"white",fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:16,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-                  <span>🕐</span><span>{slot.time}</span><span style={{fontSize:8,opacity:0.5}}>▾</span>
-                </button>
-              </div>
-            </div>
-            <div style={{position:"absolute",bottom:16,left:16,right:16}}>
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"white",lineHeight:1.2,marginBottom:4,textShadow:"0 2px 8px rgba(0,0,0,0.3)"}}>{slot.name}</div>
-              <div style={{fontSize:12,color:"rgba(255,255,255,0.7)",display:"flex",alignItems:"center",gap:4}}>
-                <span>📍</span>{slot.neighborhood}
-              </div>
-            </div>
-          </div>
-        ) : (
-          // No place photo — use category or city photo as atmospheric background
-          <div style={{
-            position:"relative",
-            height:260,
-            flexShrink:0,
-            background: isCompleted ? "#e8e8e8" : cardBg,
-            overflow:"hidden",
-          }}>
-            {/* Background photo — category-matched or city fallback */}
-            {(() => {
-              const cat = (slot.category||"").toLowerCase();
-              const bgPhoto = CATEGORY_PHOTOS[cat] ||
-                Object.entries(CATEGORY_PHOTOS).find(([k]) => cat.includes(k))?.[1] ||
-                CITY_PHOTOS[city?.split(",")[0]?.trim()];
-              return bgPhoto ? (
-                <img
-                  src={bgPhoto}
-                  alt=""
-                  style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:isCompleted?0.08:0.32}}
-                />
-              ) : null;
-            })()}
-
-            {/* Dark gradient overlay for readability */}
-            <div style={{position:"absolute",inset:0,background:
-              isCompleted ? "rgba(240,240,240,0.9)" :
-              "linear-gradient(160deg,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.25) 50%,rgba(0,0,0,0.7) 100%)"
+        {/* Hero — unified: photo if available, category/city fallback otherwise */}
+        <div style={{position:"relative",height:280,flexShrink:0,overflow:"hidden",background:isCompleted?"#e8e8e8":cardBg}}>
+          {/* Shimmer while photo loads */}
+          {slot.photo && !photoLoaded && (
+            <div style={{
+              position:"absolute",inset:0,
+              background:`linear-gradient(90deg,${cardBg} 0%,rgba(255,255,255,0.05) 50%,${cardBg} 100%)`,
+              backgroundSize:"200% 100%",
+              animation:"shimmer 1.5s ease infinite"
             }}/>
+          )}
 
-            {/* Decorative ambient glow */}
-            <div style={{position:"absolute",top:-40,right:-40,width:200,height:200,borderRadius:"50%",background:
-              bucket==="morning"?"rgba(196,154,60,0.2)":
-              bucket==="afternoon"?"rgba(74,124,89,0.2)":
-              "rgba(139,26,111,0.2)",
-              filter:"blur(40px)",pointerEvents:"none"}}/>
+          {/* Image: place photo or category/city fallback */}
+          {(() => {
+            if (slot.photo) {
+              return (
+                <img
+                  src={slot.photo}
+                  alt={slot.name}
+                  onLoad={() => setPhotoLoaded(true)}
+                  onError={e => { e.target.style.display="none"; setPhotoLoaded(true); }}
+                  style={{width:"100%",height:"100%",objectFit:"cover",opacity:photoLoaded?1:0,transition:"opacity 0.4s ease"}}
+                />
+              );
+            }
+            const cat = (slot.category||"").toLowerCase();
+            const bgPhoto = CATEGORY_PHOTOS[cat] ||
+              Object.entries(CATEGORY_PHOTOS).find(([k]) => cat.includes(k))?.[1] ||
+              CITY_PHOTOS[city?.split(",")[0]?.trim()];
+            return bgPhoto ? (
+              <img src={bgPhoto} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:isCompleted?0.08:0.42}}/>
+            ) : null;
+          })()}
 
-            {/* Top bar — full width, space between */}
-            <div style={{position:"absolute",top:0,left:0,right:0,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={e=>e.stopPropagation()}>
-              {/* Left — bucket label */}
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{fontSize:18}}>{bucket==="morning"?"🌅":bucket==="afternoon"?"☀️":"🌙"}</span>
-                <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.55)",textTransform:"uppercase",letterSpacing:"0.12em"}}>
-                  {bucket==="morning"?"Morning":bucket==="afternoon"?"Afternoon":"Evening"}
-                </span>
-              </div>
-              {/* Right — time + badges */}
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                {slot.highlight&&<span style={{background:T.gold,color:"white",fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:12}}>★ Must-do</span>}
-                {slot.price&&<span style={{background:"rgba(0,0,0,0.4)",backdropFilter:"blur(8px)",color:"rgba(255,255,255,0.9)",fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:12}}>{slot.price}</span>}
-                <button onClick={openTimeEdit} style={{background:"rgba(0,0,0,0.4)",backdropFilter:"blur(8px)",border:"1px dashed rgba(255,255,255,0.4)",color:"white",fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:16,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-                  <span>🕐</span><span>{slot.time}</span><span style={{fontSize:8,opacity:0.5}}>▾</span>
-                </button>
-              </div>
-            </div>
+          {/* Readability gradient */}
+          <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.25) 0%,transparent 35%,rgba(0,0,0,0.8) 100%)"}}/>
 
-            {/* Place name — bottom of hero */}
-            <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"48px 20px 20px",background:"linear-gradient(to top,rgba(0,0,0,0.75) 0%,transparent 100%)"}}>
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:700,color:"white",lineHeight:1.15,marginBottom:5,textShadow:"0 2px 12px rgba(0,0,0,0.5)"}}>{slot.name}</div>
-              <div style={{fontSize:12,color:"rgba(255,255,255,0.65)",display:"flex",alignItems:"center",gap:4}}>
-                <span>📍</span>{slot.neighborhood}
-              </div>
+          {/* Top bar — single time chip (tap to edit) + must-do star */}
+          <div style={{position:"absolute",top:0,left:0,right:0,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={e=>e.stopPropagation()}>
+            <button onClick={openTimeEdit} aria-label={`Change time — currently ${slot.time}`} style={{background:"rgba(0,0,0,0.55)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.22)",color:"white",fontSize:12,fontWeight:700,padding:"6px 12px",borderRadius:18,cursor:"pointer",display:"flex",alignItems:"center",gap:6,letterSpacing:"0.01em"}}>
+              <span>{slot.time}</span><span style={{fontSize:9,opacity:0.7}}>▾</span>
+            </button>
+            {slot.highlight && (
+              <span style={{background:T.gold,color:"white",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:12,letterSpacing:"0.02em",boxShadow:"0 2px 8px rgba(196,154,60,0.4)"}}>★ Must-do</span>
+            )}
+          </div>
+
+          {/* Place name + neighborhood · price */}
+          <div style={{position:"absolute",bottom:18,left:18,right:18}}>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:700,color:"white",lineHeight:1.15,marginBottom:6,textShadow:"0 2px 10px rgba(0,0,0,0.45)"}}>{slot.name}</div>
+            <div style={{fontSize:12,color:"rgba(255,255,255,0.78)",display:"flex",alignItems:"center",gap:6}}>
+              <span>📍 {slot.neighborhood}</span>
+              {slot.price && <><span style={{opacity:0.4}}>·</span><span style={{fontWeight:600}}>{slot.price}</span></>}
             </div>
           </div>
-        )}
+        </div>
 
         {/* Content area */}
-        <div style={{padding:"20px 20px 16px",flex:1,display:"flex",flexDirection:"column",gap:12,background:isCompleted?"#f8f8f8":"transparent"}}>
-          {/* Activity */}
-          <div style={{fontSize:15,color:slot.highlight||isActive?"rgba(255,255,255,0.85)":T.inkLight,lineHeight:1.65,fontStyle:"italic"}}>{slot.activity}</div>
+        <div style={{padding:"18px 20px 18px",flex:1,display:"flex",flexDirection:"column",gap:12,background:isCompleted?"#f8f8f8":"transparent"}}>
+          {/* Activity — capped at 2 lines */}
+          {slot.activity && (
+            <div style={{fontSize:14.5,color:isCompleted?T.inkLight:"rgba(255,255,255,0.82)",lineHeight:1.55,fontStyle:"italic",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{slot.activity}</div>
+          )}
 
-          {/* Tip */}
-          {/* Confidence signal */}
-          {slot.confidence && (
-            <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
-              {slot.confidence === "verified" && (
-                <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:T.sage,fontWeight:600}}>
-                  <span>✅</span><span>Verified on Google</span>
-                </div>
-              )}
-              {slot.confidence === "found" && (
-                <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:T.inkFaint,fontWeight:600}}>
-                  <span>📍</span><span>Found — hours not listed</span>
-                </div>
-              )}
-              {slot.confidence === "unverified" && (
-                <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#c84b2f",fontWeight:600}}>
-                  <span>⚠️</span><span>Unverified — confirm before visiting</span>
-                </div>
-              )}
+          {/* Only show warnings — hide success states (verified/found) */}
+          {slot.confidence === "unverified" && !slot.hours_warning && (
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"#ffb4a6",fontWeight:600}}>
+              <span>⚠</span><span>Unverified — confirm before visiting</span>
             </div>
           )}
 
-          {slot.must_know&&(
-            <div style={{background:slot.highlight||isActive?"rgba(255,255,255,0.1)":"#fdf5e6",borderRadius:12,padding:"10px 14px",fontSize:13,color:slot.highlight||isActive?"rgba(255,255,255,0.7)":"#7a5c2a",fontWeight:600,display:"flex",gap:8,alignItems:"flex-start"}}>
-              <span style={{flexShrink:0}}>💡</span><span>{slot.must_know}</span>
-            </div>
-          )}
-
-          {/* Hours warning */}
+          {/* Hours warning — the only auto-action banner */}
           {slot.hours_warning && (
-            <div style={{display:"flex",alignItems:"center",gap:8,background:"rgba(200,75,47,0.08)",border:"1px solid rgba(200,75,47,0.2)",borderRadius:12,padding:"10px 12px"}}>
-              <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
-              <div style={{flex:1}}>
-                <div style={{fontSize:12,fontWeight:700,color:"#c84b2f"}}>Hours conflict</div>
-                <div style={{fontSize:11,color:"#c84b2f",opacity:0.85,marginTop:1}}>{slot.hours_warning}</div>
-              </div>
+            <div style={{display:"flex",alignItems:"center",gap:10,background:"rgba(200,75,47,0.18)",border:"1px solid rgba(200,75,47,0.35)",borderRadius:12,padding:"9px 12px"}}>
+              <span style={{fontSize:14,flexShrink:0}}>⚠</span>
+              <div style={{flex:1,fontSize:12,color:"#ffcfc2",fontWeight:600}}>{slot.hours_warning}</div>
               <button onClick={(e)=>{e.stopPropagation();openTimeEdit(e);}}
                 style={{padding:"5px 10px",borderRadius:8,background:"#c84b2f",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>
-                Fix time
+                Fix
               </button>
             </div>
           )}
 
-          {/* Transit */}
-          {/* Transit to NEXT stop */}
+          {/* Collapsible local tip */}
+          {slot.must_know && (
+            <button onClick={(e)=>{e.stopPropagation();setTipOpen(o=>!o);}}
+              style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"10px 12px",display:"flex",alignItems:"flex-start",gap:8,textAlign:"left",cursor:"pointer",width:"100%"}}>
+              <span style={{fontSize:14,flexShrink:0,marginTop:1}}>💡</span>
+              <div style={{flex:1,fontSize:12.5,color:"rgba(255,255,255,0.88)",lineHeight:1.45,fontWeight:500,display:tipOpen?"block":"-webkit-box",WebkitLineClamp:tipOpen?"unset":1,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
+                {tipOpen ? slot.must_know : <><span style={{fontWeight:700,color:"rgba(255,255,255,0.65)",letterSpacing:"0.02em",marginRight:6}}>Local tip</span>{slot.must_know}</>}
+              </div>
+              <span style={{fontSize:10,color:"rgba(255,255,255,0.5)",flexShrink:0,marginTop:2}}>{tipOpen?"▴":"▾"}</span>
+            </button>
+          )}
+
+          {/* Transit to NEXT stop — compact single line */}
           {activeSlotIdx < slots.length - 1 && (() => {
             const nextSlot = slots[activeSlotIdx + 1];
             const mode = nextSlot?.transit_mode || "walk";
-            const modeLabel = ({walk:"On foot",subway:"Subway",taxi:"Taxi",uber:"Uber",lyft:"Lyft",bus:"Bus",tram:"Tram","tuk-tuk":"Tuk-tuk",ferry:"Ferry",bike:"Bike",drive:"By car"})[mode] || mode;
             const mins = (nextSlot?.transit_from_prev||"").match(/\d+/)?.[0];
             if (!nextSlot?.transit_from_prev) return null;
+            const isRideshare = mode === "uber" || mode === "lyft";
             return (
-              <div style={{display:"flex",alignItems:"center",gap:10,borderRadius:12,padding:"10px 14px",background:slot.highlight||isActive?"rgba(255,255,255,0.08)":"rgba(0,0,0,0.04)",border:`1px solid ${slot.highlight||isActive?"rgba(255,255,255,0.1)":"rgba(0,0,0,0.06)"}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,borderRadius:10,padding:"8px 12px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)"}}>
                 {mode==="uber" ? (
-                  <div style={{width:30,height:30,borderRadius:8,background:"#000",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    <span style={{fontSize:13,fontWeight:900,color:"white",fontFamily:"Arial"}}>U</span>
+                  <div style={{width:22,height:22,borderRadius:6,background:"#000",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <span style={{fontSize:10,fontWeight:900,color:"white"}}>U</span>
                   </div>
                 ) : mode==="lyft" ? (
-                  <div style={{width:30,height:30,borderRadius:8,background:"#ea0083",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    <span style={{fontSize:13,fontWeight:900,color:"white",fontFamily:"Arial"}}>L</span>
+                  <div style={{width:22,height:22,borderRadius:6,background:"#ea0083",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <span style={{fontSize:10,fontWeight:900,color:"white"}}>L</span>
                   </div>
                 ) : (
-                  <span style={{fontSize:22,lineHeight:1,flexShrink:0}}>{TRANSIT_ICONS[mode]||"🚶"}</span>
+                  <span style={{fontSize:16,lineHeight:1,flexShrink:0}}>{TRANSIT_ICONS[mode]||"🚶"}</span>
                 )}
-                <div style={{flex:1}}>
-                  <div style={{display:"flex",alignItems:"center",gap:0}}>
-                    <span style={{fontSize:13,fontWeight:700,color:slot.highlight||isActive?"white":TRANSIT_COLORS[mode]||T.sage}}>{modeLabel}</span>
-                    <span style={{margin:"0 8px",color:slot.highlight||isActive?"rgba(255,255,255,0.2)":"#ddd",fontSize:14}}>|</span>
-                    <span style={{fontSize:13,fontWeight:600,color:slot.highlight||isActive?"rgba(255,255,255,0.7)":"#666"}}>{mins} min</span>
-                  </div>
-                  <div style={{fontSize:10,color:slot.highlight||isActive?"rgba(255,255,255,0.3)":"#bbb",marginTop:1}}>
-                    to {nextSlot.name}
-                  </div>
+                <div style={{flex:1,fontSize:12,color:"rgba(255,255,255,0.75)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  <span style={{fontWeight:700,color:"white"}}>{mins} min</span>
+                  <span style={{opacity:0.6}}> to </span>
+                  <span style={{fontWeight:600}}>{nextSlot.name}</span>
                 </div>
-                <span style={{fontSize:11,color:slot.highlight||isActive?"rgba(255,255,255,0.3)":"#bbb"}}>→</span>
+                <span style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>→</span>
               </div>
             );
           })()}
 
-          {/* Tap hint */}
-          <div style={{fontSize:11,color:slot.highlight||isActive?"rgba(255,255,255,0.25)":T.dust,textAlign:"center",fontStyle:"italic"}}>
-            Tap card for Google reviews & hours
-          </div>
-
           <div style={{flex:1}}/>
 
-          {/* Action buttons */}
-          <div style={{display:"flex",gap:8}} onClick={e=>e.stopPropagation()}>
+          {/* Action row — primary CTA + two icon buttons */}
+          <div style={{display:"flex",gap:8,alignItems:"stretch"}} onClick={e=>e.stopPropagation()}>
             {isCompleted ? (
               (() => {
                 const c = rating>=9?"#22c55e":rating>=7?"#84cc16":rating>=5?"#eab308":rating>=3?"#f97316":"#ef4444";
@@ -342,25 +277,36 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
               })()
             ) : isActive ? (
               <button onClick={()=>checkOut(activeDay,activeSlotIdx,slot)}
-                style={{flex:1,padding:"14px 0",borderRadius:14,background:"rgba(255,255,255,0.15)",border:"1.5px solid rgba(255,255,255,0.3)",color:"white",fontSize:14,fontWeight:700,cursor:"pointer"}}>
-                Done here — rate it →
+                style={{flex:1,padding:"13px 0",borderRadius:14,background:"rgba(255,255,255,0.18)",border:"1.5px solid rgba(255,255,255,0.35)",color:"white",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                Done — rate it →
               </button>
             ) : (
               <>
                 <button onClick={()=>checkIn(activeDay,activeSlotIdx)}
-                  style={{flex:1,padding:"13px 0",borderRadius:14,background:slot.highlight?T.gold:T.sage,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                  style={{flex:1,padding:"13px 0",borderRadius:14,background:slot.highlight?T.gold:T.sage,border:"none",color:"white",fontSize:14,fontWeight:700,cursor:"pointer",letterSpacing:"0.01em"}}>
                   I'm here →
                 </button>
-                <a
-                  href={`https://maps.apple.com/?q=${encodeURIComponent(slot.name)}`}
-                  target="_blank" rel="noopener noreferrer"
-                  onClick={e=>e.stopPropagation()}
-                  style={{padding:"13px 12px",borderRadius:14,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.15)",color:slot.highlight||isActive?"white":T.inkFaint,fontSize:13,cursor:"pointer",textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",whiteSpace:"nowrap"}}>
-                  🗺
-                </a>
+                {(() => {
+                  const isIOS = typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+                  const q = encodeURIComponent([slot.name, slot.neighborhood, city].filter(Boolean).join(" "));
+                  const mapsHref = isIOS
+                    ? `https://maps.apple.com/?q=${q}`
+                    : `https://www.google.com/maps/search/?api=1&query=${q}`;
+                  return (
+                    <a
+                      href={mapsHref}
+                      target="_blank" rel="noopener noreferrer"
+                      onClick={e=>e.stopPropagation()}
+                      aria-label="Open in maps"
+                      style={{width:46,borderRadius:14,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.18)",color:"white",fontSize:17,cursor:"pointer",textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      🗺
+                    </a>
+                  );
+                })()}
                 <button onClick={(e)=>{e.stopPropagation();setSelectedPlace({name:slot.name,category:slot.category});}}
-                  style={{padding:"13px 12px",borderRadius:14,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.15)",color:slot.highlight||isActive?"white":T.inkFaint,fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
-                  ★ Info
+                  aria-label="Reviews and details"
+                  style={{width:46,borderRadius:14,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.18)",color:"white",fontSize:15,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  ⓘ
                 </button>
               </>
             )}
@@ -484,7 +430,7 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 4px",marginBottom:NAV_H+60}}>
         <button onClick={()=>activeSlotIdx>0&&setActiveSlotIdx(i=>i-1)}
           style={{background:"none",border:"none",color:activeSlotIdx>0?T.inkLight:T.dust,fontSize:13,fontWeight:600,cursor:activeSlotIdx>0?"pointer":"default",padding:"8px 4px",display:"flex",alignItems:"center",gap:4}}>
-          {activeSlotIdx>0&&<>← <span style={{fontSize:11,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slots[activeSlotIdx-1]?.name?.split(' ')[0]}</span></>}
+          {activeSlotIdx>0&&<>← <span style={{fontSize:11,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slots[activeSlotIdx-1]?.name}</span></>}
         </button>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           {slots.map((_,i)=>(
@@ -494,7 +440,7 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
         </div>
         <button onClick={()=>activeSlotIdx<slots.length-1&&setActiveSlotIdx(i=>i+1)}
           style={{background:"none",border:"none",color:activeSlotIdx<slots.length-1?T.inkLight:T.dust,fontSize:13,fontWeight:600,cursor:activeSlotIdx<slots.length-1?"pointer":"default",padding:"8px 4px",display:"flex",alignItems:"center",gap:4}}>
-          {activeSlotIdx<slots.length-1&&<><span style={{fontSize:11,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slots[activeSlotIdx+1]?.name?.split(' ')[0]}</span> →</>}
+          {activeSlotIdx<slots.length-1&&<><span style={{fontSize:11,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slots[activeSlotIdx+1]?.name}</span> →</>}
         </button>
       </div>
     </div>
