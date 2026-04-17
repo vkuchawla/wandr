@@ -1177,7 +1177,7 @@ function PlanMode({ day, activeDay, ratings, BUCKET_COLORS, getBucket, TRANSIT_I
                 </div>
 
                 {/* Card */}
-                <div style={{flex:1,marginLeft:10,marginBottom:6}}>
+                <div style={{flex:1,minWidth:0,marginLeft:10,marginBottom:6}}>
                   <div
                     onClick={()=>handleSwap(i)}
                     style={{
@@ -1190,7 +1190,7 @@ function PlanMode({ day, activeDay, ratings, BUCKET_COLORS, getBucket, TRANSIT_I
                       transition:"all 0.15s",
                       minHeight:52,
                     }}>
-                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
                       {/* Category icon */}
                       <div style={{fontSize:18,lineHeight:1,flexShrink:0,opacity:isCompleted?0.5:1,width:22,textAlign:"center"}}>{catIcon}</div>
 
@@ -1225,9 +1225,9 @@ function PlanMode({ day, activeDay, ratings, BUCKET_COLORS, getBucket, TRANSIT_I
 
                     {/* Inline warning (only for issues) */}
                     {(slot.hours_warning || slot.confidence === "unverified") && !isCompleted && (
-                      <div style={{marginTop:8,paddingTop:8,borderTop:"1px dashed rgba(200,75,47,0.25)",fontSize:11,color:"#c84b2f",display:"flex",gap:6,alignItems:"center"}}>
-                        <span>⚠</span>
-                        <span style={{flex:1}}>{slot.hours_warning || "Confirm before visiting"}</span>
+                      <div style={{marginTop:8,paddingTop:8,borderTop:"1px dashed rgba(200,75,47,0.25)",fontSize:11,color:"#c84b2f",display:"flex",gap:6,alignItems:"flex-start"}}>
+                        <span style={{flexShrink:0}}>⚠</span>
+                        <span style={{flex:1,minWidth:0,lineHeight:1.4}}>{slot.hours_warning || "Confirm before visiting"}</span>
                       </div>
                     )}
                   </div>
