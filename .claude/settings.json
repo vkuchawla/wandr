@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd=$(jq -r '.tool_input.command // \"\"'); if echo \"$cmd\" | grep -qE '(vercel --prod|git push.*\\b(main|master)\\b)'; then if grep -qE '^const DEV_PREVIEW = !import\\.meta\\.env\\.PROD && true' \"$CLAUDE_PROJECT_DIR/src/HomeScreen.jsx\" 2>/dev/null; then printf '{\"decision\":\"block\",\"reason\":\"DEV_PREVIEW is true in src/HomeScreen.jsx — mock data would ship to prod. Flip it to false before deploying/pushing.\"}'; exit 0; fi; fi; if echo \"$cmd\" | grep -qE 'git push'; then if ! curl -sf -m 5 https://wandr-62i6.onrender.com/health > /dev/null; then printf '{\"decision\":\"block\",\"reason\":\"Backend /health is not responding. Check Render before pushing.\"}'; exit 0; fi; fi; printf '{}'"
+          }
+        ]
+      }
+    ]
+  }
+}
