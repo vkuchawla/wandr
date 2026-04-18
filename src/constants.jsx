@@ -100,6 +100,7 @@ const GLOBAL_CSS = `
   @keyframes scaleIn  { from { opacity:0; transform:scale(0.92) } to { opacity:1; transform:scale(1) } }
   @keyframes bounceIn { 0%{transform:scale(0.8);opacity:0} 60%{transform:scale(1.06)} 100%{transform:scale(1);opacity:1} }
   @keyframes cardLift { from{transform:translateY(0)} to{transform:translateY(-3px)} }
+  @keyframes kenburns { 0%{transform:scale(1) translate(0,0)} 100%{transform:scale(1.08) translate(-1.5%,1.5%)} }
 
   /* Tap/press feedback for interactive elements */
   .pressable { transition: transform 0.12s ease, box-shadow 0.15s ease; }

@@ -57,27 +57,87 @@ const callClaude = async (prompt, retries = 3, maxTokens = 3000, model = "claude
   }
 };
 
+// Try Wikipedia Commons for landmarks (temples, museums, famous sites)
+const wikipediaHero = async (name, city) => {
+  try {
+    // Best-effort: query full-text search scoped to the place name + city
+    const q = encodeURIComponent(`${name} ${city.split(",")[0]}`);
+    const res = await axios.get(`https://en.wikipedia.org/api/rest_v1/page/summary/${q}`, { timeout: 2500 });
+    const img = res.data?.originalimage?.source || res.data?.thumbnail?.source;
+    if (img && !/placeholder|default/i.test(img)) return img;
+  } catch(e) { /* not every place has a Wiki page */ }
+  return null;
+};
+
+// Enrich each slot with:
+//   slot.photos  — array of up to 5 photo URLs (Google → Foursquare → Wikipedia)
+//   slot.photo   — the hero (slot.photos[0]) for backwards compat
+//   slot.rating  — Google star rating if available
+//   slot.rating_count — number of Google ratings
+//   slot.lat / slot.lng — coordinates for map rendering
 const enrichWithPhotos = async (slots, city) => {
   await Promise.all(slots.map(async (slot) => {
     slot.confidence = "unverified";
+    slot.photos = [];
+
+    // 1) Google Places — higher quality photos + rating + coords
     try {
-      const searchRes = await axios.get("https://api.foursquare.com/v3/places/search", {
-        headers: { Authorization: FSQ_KEY },
-        params: { query: slot.name, near: city, limit: 1 },
-        timeout: 3000
-      });
-      const place = searchRes.data?.results?.[0];
-      if (place?.fsq_id) {
+      const gRes = await axios.post(
+        "https://places.googleapis.com/v1/places:searchText",
+        { textQuery: `${slot.name} ${city}`, languageCode: "en", maxResultCount: 1 },
+        {
+          headers: {
+            "X-Goog-Api-Key": GOOGLE_KEY,
+            "X-Goog-FieldMask": "places.photos,places.rating,places.userRatingCount,places.location",
+            "Content-Type": "application/json",
+          },
+          timeout: 3500,
+        }
+      );
+      const g = gRes.data?.places?.[0];
+      if (g) {
         slot.confidence = "found";
-        const photoRes = await axios.get(`https://api.foursquare.com/v3/places/${place.fsq_id}/photos`, {
-          headers: { Authorization: FSQ_KEY },
-          params: { limit: 1 },
-          timeout: 3000
-        });
-        const photo = photoRes.data?.[0];
-        if (photo) slot.photo = `${photo.prefix}800x450${photo.suffix}`;
+        if (g.rating) slot.rating = g.rating;
+        if (g.userRatingCount) slot.rating_count = g.userRatingCount;
+        if (g.location) { slot.lat = g.location.latitude; slot.lng = g.location.longitude; }
+        if (g.photos?.length) {
+          slot.photos.push(...g.photos.slice(0, 5).map(p =>
+            `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=1200&key=${GOOGLE_KEY}`
+          ));
+        }
       }
-    } catch(e) { /* optional */ }
+    } catch(e) { /* fall through to Foursquare */ }
+
+    // 2) Foursquare — fill gap if Google didn't give us enough photos
+    if (slot.photos.length < 3) {
+      try {
+        const searchRes = await axios.get("https://api.foursquare.com/v3/places/search", {
+          headers: { Authorization: FSQ_KEY },
+          params: { query: slot.name, near: city, limit: 1 },
+          timeout: 2500,
+        });
+        const place = searchRes.data?.results?.[0];
+        if (place?.fsq_id) {
+          if (slot.confidence === "unverified") slot.confidence = "found";
+          const photoRes = await axios.get(`https://api.foursquare.com/v3/places/${place.fsq_id}/photos`, {
+            headers: { Authorization: FSQ_KEY },
+            params: { limit: 5 },
+            timeout: 2500,
+          });
+          (photoRes.data || []).forEach(p => {
+            slot.photos.push(`${p.prefix}1200x800${p.suffix}`);
+          });
+        }
+      } catch(e) { /* optional */ }
+    }
+
+    // 3) Wikipedia Commons — last-resort for landmarks with no listing photos
+    if (slot.photos.length === 0 && /temple|shrine|museum|garden|palace|castle|cathedral|church|landmark|monument|tower|bridge|park/i.test(`${slot.name} ${slot.category || ""}`)) {
+      const wikiImg = await wikipediaHero(slot.name, city);
+      if (wikiImg) slot.photos.push(wikiImg);
+    }
+
+    if (slot.photos.length > 0) slot.photo = slot.photos[0];
   }));
 };
 
@@ -341,7 +401,7 @@ app.post("/enrich", async (req, res) => {
       {
         headers: {
           "X-Goog-Api-Key": GOOGLE_KEY,
-          "X-Goog-FieldMask": "places.regularOpeningHours,places.displayName,places.photos",
+          "X-Goog-FieldMask": "places.regularOpeningHours,places.displayName,places.photos,places.rating,places.userRatingCount,places.location",
           "Content-Type": "application/json"
         },
         timeout: 5000
@@ -352,11 +412,17 @@ app.post("/enrich", async (req, res) => {
 
     const result = { confidence: "found" };
 
-    // Use Google photo if Foursquare didn't provide one
-    if (!slot.photo && gPlace.photos?.length) {
-      const p = gPlace.photos[0];
-      result.photo = `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${GOOGLE_KEY}`;
+    // Populate photos array + hero if Foursquare didn't provide one
+    if (gPlace.photos?.length) {
+      const photos = gPlace.photos.slice(0, 5).map(p =>
+        `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=1200&key=${GOOGLE_KEY}`
+      );
+      result.photos = photos;
+      if (!slot.photo) result.photo = photos[0];
     }
+    if (gPlace.rating) result.rating = gPlace.rating;
+    if (gPlace.userRatingCount) result.rating_count = gPlace.userRatingCount;
+    if (gPlace.location) { result.lat = gPlace.location.latitude; result.lng = gPlace.location.longitude; }
 
     if (gPlace.regularOpeningHours) {
       result.confidence = "verified";

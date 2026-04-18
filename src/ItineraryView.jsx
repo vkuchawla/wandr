@@ -1102,6 +1102,26 @@ function PlanMode({ day, activeDay, ratings, BUCKET_COLORS, getBucket, TRANSIT_I
   // Count issues for the day header
   const issueCount = localSlots.filter(s => s.hours_warning || s.confidence === "unverified").length;
 
+  // Build a lightweight SVG route visualizer — plots normalized coords as dots with a connecting line
+  const miniMap = (() => {
+    const pts = localSlots
+      .map((s, idx) => ({ idx, lat: s.lat, lng: s.lng, name: s.name, highlight: s.highlight }))
+      .filter(p => typeof p.lat === "number" && typeof p.lng === "number" && Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    if (pts.length < 2) return null;
+    const W = 640, H = 160, pad = 28;
+    const lats = pts.map(p => p.lat), lngs = pts.map(p => p.lng);
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+    const spanLat = Math.max(maxLat - minLat, 0.001);
+    const spanLng = Math.max(maxLng - minLng, 0.001);
+    const sx = (lng) => pad + ((lng - minLng) / spanLng) * (W - pad * 2);
+    const sy = (lat) => pad + ((maxLat - lat) / spanLat) * (H - pad * 2);
+    return { W, H, pts: pts.map(p => ({ ...p, x: sx(p.lng), y: sy(p.lat) })) };
+  })();
+
+  const BUCKET_LABELS = { morning: "Morning", afternoon: "Afternoon", evening: "Evening" };
+  const BUCKET_ICONS  = { morning: "🌅", afternoon: "☀️", evening: "🌙" };
+
   return (
     <div style={{padding:"14px 16px",paddingBottom:NAV_H+80}}>
       {/* Day header strip */}
@@ -1133,6 +1153,28 @@ function PlanMode({ day, activeDay, ratings, BUCKET_COLORS, getBucket, TRANSIT_I
         )}
       </div>
 
+      {/* Mini route map */}
+      {miniMap && (
+        <div style={{marginBottom:16,padding:12,borderRadius:16,background:T.white,border:`1px solid ${T.dust}`,boxShadow:"0 2px 8px rgba(28,22,18,0.04)"}}>
+          <div style={{fontSize:10,fontWeight:800,color:T.inkFaint,textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+            <span>🗺</span><span>Route</span>
+          </div>
+          <svg viewBox={`0 0 ${miniMap.W} ${miniMap.H}`} style={{width:"100%",height:"auto",display:"block",background:T.cream,borderRadius:12}}>
+            {/* Route polyline */}
+            <polyline
+              points={miniMap.pts.map(p => `${p.x},${p.y}`).join(" ")}
+              fill="none" stroke={T.accent} strokeOpacity="0.55" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="0" />
+            {/* Stop markers */}
+            {miniMap.pts.map((p, i) => (
+              <g key={i}>
+                <circle cx={p.x} cy={p.y} r="12" fill={p.highlight ? T.gold : T.accent} stroke={T.cream} strokeWidth="3" />
+                <text x={p.x} y={p.y + 4} textAnchor="middle" fill="#fff" fontSize="12" fontWeight="800" fontFamily="'DM Sans',sans-serif">{p.idx + 1}</text>
+              </g>
+            ))}
+          </svg>
+        </div>
+      )}
+
       {/* Compact schedule */}
       <div style={{position:"relative"}}>
         {/* Vertical rail */}
@@ -1151,8 +1193,22 @@ function PlanMode({ day, activeDay, ratings, BUCKET_COLORS, getBucket, TRANSIT_I
           const catIcon = getCategoryIcon(slot);
           const ratingColor = isCompleted ? (rating>=9?"#22c55e":rating>=7?"#84cc16":rating>=5?"#eab308":rating>=3?"#f97316":"#ef4444") : null;
 
+          const curBucket = getBucket(slot.time);
+          const prevBucket = i > 0 ? getBucket(localSlots[i - 1].time) : null;
+          const showDivider = curBucket && curBucket !== prevBucket;
+
           return (
             <div key={`${slot.name}-${i}`} style={{position:"relative"}}>
+              {/* Time-of-day divider */}
+              {showDivider && (
+                <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0 8px",marginTop:i===0?0:6}}>
+                  <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:6,paddingLeft:34}}>
+                    <span style={{fontSize:13,lineHeight:1}}>{BUCKET_ICONS[curBucket]}</span>
+                    <span style={{fontSize:10,fontWeight:800,color:T.inkLight,textTransform:"uppercase",letterSpacing:"0.14em"}}>{BUCKET_LABELS[curBucket]}</span>
+                  </div>
+                  <div style={{flex:1,height:1,background:T.dust}}/>
+                </div>
+              )}
               {/* Row */}
               <div style={{display:"flex",alignItems:"stretch",gap:0,marginBottom:isEditingTime?0:2}}>
                 {/* Time rail */}

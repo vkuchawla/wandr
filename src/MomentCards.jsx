@@ -1,29 +1,61 @@
 import { useState, useRef, useEffect } from "react";
 import { NAV_H, T, TRANSIT_COLORS, TRANSIT_ICONS, CITY_PHOTOS } from "./constants.jsx";
 
-// Category → atmospheric Unsplash photo
-const CATEGORY_PHOTOS = {
-  "food":       "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80",
-  "restaurant": "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80",
-  "cafe":       "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&q=80",
-  "coffee":     "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&q=80",
-  "bar":        "https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=800&q=80",
-  "nightlife":  "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&q=80",
-  "club":       "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&q=80",
-  "museum":     "https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=800&q=80",
-  "art":        "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=800&q=80",
-  "park":       "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=80",
-  "nature":     "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80",
-  "beach":      "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=80",
-  "market":     "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&q=80",
-  "shopping":   "https://images.unsplash.com/photo-1481437156560-3205f6a55735?w=800&q=80",
-  "hotel":      "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&q=80",
-  "spa":        "https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&q=80",
-  "temple":     "https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=800&q=80",
-  "church":     "https://images.unsplash.com/photo-1519734777837-3f986da12fe4?w=800&q=80",
-  "landmark":   "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=800&q=80",
-  "view":       "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&q=80",
-  "viewpoint":  "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&q=80",
+// Category → pool of atmospheric Unsplash photos (pick one deterministically per slot)
+const u = (id) => `https://images.unsplash.com/photo-${id}?w=1200&q=80&auto=format&fit=crop`;
+const CATEGORY_PHOTO_POOLS = {
+  food:       ["1414235077428-338989a2e8c0","1504674900247-0877df9cc836","1476224203421-9ac39bcb3327","1540189549336-e6e99c3679fe","1546069901-ba9599a7e63c"].map(u),
+  restaurant: ["1517248135467-4c7edcad34c4","1559329007-40df8a9345d8","1528605248644-14dd04022da1","1555396273-367ea4eb4db5","1551218808-94e220e084d2"].map(u),
+  cafe:       ["1495474472287-4d71bcdd2085","1453614512568-c4024d13c247","1501339847302-ac426a4a7cbb","1442512595331-e89e73853f31","1559305616-3f99cd43e353"].map(u),
+  coffee:     ["1495474472287-4d71bcdd2085","1453614512568-c4024d13c247","1459755486867-b55449bb39ff","1504627298434-2119d6928e93","1514432324607-a09d9b4aefdd"].map(u),
+  bar:        ["1470337458703-46ad1756a187","1514933651103-005eec06c04b","1551024709-8f23befc6f87","1566417713940-fe7c737a9ef2","1541532713592-79a0317b6b77"].map(u),
+  nightlife:  ["1516450360452-9312f5e86fc7","1566417713940-fe7c737a9ef2","1551024709-8f23befc6f87","1470337458703-46ad1756a187","1514933651103-005eec06c04b"].map(u),
+  club:       ["1516450360452-9312f5e86fc7","1571266028243-d220bc53f27d","1429962714451-bb934ecdc4ec","1459749411175-04bf5292ceea","1514933651103-005eec06c04b"].map(u),
+  museum:     ["1518998053901-5348d3961a04","1544989164-31f57b3c4b8a","1554907984-15263bfd63bd","1565060169187-5284a3fd87a3","1565060134-1c90deb7b7b7"].map(u),
+  art:        ["1501594907352-04cda38ebc29","1536924940846-227afb31e2a5","1541961017774-22349e4a1262","1554907984-15263bfd63bd","1578926288207-32356af08fc1"].map(u),
+  park:       ["1441974231531-c6227db76b6e","1506260408121-e353d10b87c7","1519331379826-f10be5486c6f","1472214103451-9374bd1c798e","1448375240586-882707db888b"].map(u),
+  nature:     ["1506905925346-21bda4d32df4","1501785888041-af3ef285b470","1470770841072-f978cf4d019e","1447752875215-b2761acb3c5d","1472214103451-9374bd1c798e"].map(u),
+  beach:      ["1507525428034-b723cf961d3e","1519046904884-53103b34b206","1506929562872-bb421503ef21","1468413253725-0d5181091126","1506953823976-52e1fdc0149a"].map(u),
+  market:     ["1555396273-367ea4eb4db5","1573246123716-6b1782bfc499","1488459716781-31db52582fe9","1534723452862-4c874018d66d","1543348745-777c6ce37d20"].map(u),
+  shopping:   ["1481437156560-3205f6a55735","1483985988355-763728e1935b","1472851294608-062f824d29cc","1472851294608-062f824d29cc","1441986300917-64674bd600d8"].map(u),
+  hotel:      ["1566073771259-6a8506099945","1564501049412-61c2a3083791","1571896349842-33c89424de2d","1520250497591-112f2f40a3f4","1590490360182-c33d57733427"].map(u),
+  spa:        ["1540555700478-4be289fbecef","1544161515-4ab6ce6db874","1519823551278-64ac92734fb1","1540555700478-4be289fbecef","1571019614242-c5c5dee9f50b"].map(u),
+  temple:     ["1528360983277-13d401cdc186","1545569341-9eb8b30979d9","1478436127897-769e1538f1a2","1493780474015-ba834fd0ce2f","1580181566229-093bbf35ae18"].map(u),
+  shrine:     ["1528360983277-13d401cdc186","1545569341-9eb8b30979d9","1580181566229-093bbf35ae18","1493780474015-ba834fd0ce2f","1578662996442-48f60103fc96"].map(u),
+  church:     ["1519734777837-3f986da12fe4","1478436127897-769e1538f1a2","1548276145-69a9521f0499","1493780474015-ba834fd0ce2f","1548276145-69a9521f0499"].map(u),
+  landmark:   ["1501594907352-04cda38ebc29","1511739001486-6bfe10ce785f","1502602898657-3e91760cbb34","1533105079780-92b9be482077","1467269204594-9661b134dd2b"].map(u),
+  view:       ["1476514525535-07fb3b4ae5f1","1470071459604-3b5ec3a7fe05","1501785888041-af3ef285b470","1447752875215-b2761acb3c5d","1501785888041-af3ef285b470"].map(u),
+  viewpoint:  ["1476514525535-07fb3b4ae5f1","1470071459604-3b5ec3a7fe05","1469854523086-cc02fe5d8800","1447752875215-b2761acb3c5d","1506905925346-21bda4d32df4"].map(u),
+};
+
+// Simple deterministic hash → index so the same slot always gets the same fallback photo
+const hashToIdx = (str, max) => {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return h % Math.max(1, max);
+};
+
+// Haversine distance between two lat/lng points, returned in miles
+const haversineMiles = (lat1, lng1, lat2, lng2) => {
+  if (![lat1,lng1,lat2,lng2].every(n => typeof n === "number" && Number.isFinite(n))) return null;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const R = 3958.8; // earth radius in miles
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+};
+
+const pickFallbackPhoto = (slot, city) => {
+  const cat = (slot?.category || "").toLowerCase();
+  const pool =
+    CATEGORY_PHOTO_POOLS[cat] ||
+    Object.entries(CATEGORY_PHOTO_POOLS).find(([k]) => cat.includes(k))?.[1];
+  if (pool) {
+    const key = (slot?.name || "") + (slot?.neighborhood || "") + (city || "");
+    return pool[hashToIdx(key, pool.length)];
+  }
+  return CITY_PHOTOS[city?.split(",")[0]?.trim()] || null;
 };
 
 function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, setSelectedPlace, BUCKET_COLORS, getBucket, TRANSIT_ICONS, TRANSIT_COLORS, city, onUpdateSlots }) {
@@ -80,13 +112,15 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
   };
 
   const [photoLoaded, setPhotoLoaded] = useState(false);
+  const [photoIdx, setPhotoIdx] = useState(0); // which slot.photos[i] is showing
+  const [lightbox, setLightbox] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
   const [showSwipeHint, setShowSwipeHint] = useState(() => {
     return !localStorage.getItem("wandr-seen-swipe") && slots.length > 1;
   });
 
   // Reset photo load state when slot changes
-  useEffect(() => { setPhotoLoaded(false); setTipOpen(false); }, [activeSlotIdx]);
+  useEffect(() => { setPhotoLoaded(false); setTipOpen(false); setPhotoIdx(0); }, [activeSlotIdx]);
   // Clamp active slot when switching days so we never render a blank slot
   useEffect(() => { setActiveSlotIdx(0); }, [activeDay]);
   const touchStartX = useRef(null);
@@ -134,61 +168,98 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
         onClick={()=>setSelectedPlace({name:slot.name,category:slot.category})}>
 
         {/* Hero — unified: photo if available, category/city fallback otherwise */}
-        <div style={{position:"relative",height:280,flexShrink:0,overflow:"hidden",background:isCompleted?"#e8e8e8":cardBg}}>
-          {/* Shimmer while photo loads */}
-          {slot.photo && !photoLoaded && (
-            <div style={{
-              position:"absolute",inset:0,
-              background:`linear-gradient(90deg,${cardBg} 0%,rgba(255,255,255,0.05) 50%,${cardBg} 100%)`,
-              backgroundSize:"200% 100%",
-              animation:"shimmer 1.5s ease infinite"
-            }}/>
-          )}
+        {(() => {
+          // Build photo candidate list: real photos[] → legacy single .photo → deterministic fallback
+          const realPhotos = (Array.isArray(slot.photos) && slot.photos.length > 0)
+            ? slot.photos
+            : (slot.photo ? [slot.photo] : []);
+          const fallback = pickFallbackPhoto(slot, city);
+          const photos = realPhotos.length > 0 ? realPhotos : (fallback ? [fallback] : []);
+          const isReal = realPhotos.length > 0 && photoIdx < realPhotos.length;
+          const currentPhoto = photos[Math.min(photoIdx, photos.length - 1)];
+          const handleErr = () => {
+            // Rotate to the next URL, else drop photoIdx to the fallback slot
+            setPhotoIdx(i => Math.min(i + 1, photos.length));
+            setPhotoLoaded(true);
+          };
+          return (
+            <div style={{position:"relative",height:280,flexShrink:0,overflow:"hidden",background:isCompleted?"#e8e8e8":cardBg}}
+              onClick={(e)=>{ if (currentPhoto) { e.stopPropagation(); setLightbox(true); } }}>
 
-          {/* Image: place photo or category/city fallback */}
-          {(() => {
-            if (slot.photo) {
-              return (
+              {/* Shimmer while loading */}
+              {currentPhoto && !photoLoaded && (
+                <div style={{
+                  position:"absolute",inset:0,
+                  background:`linear-gradient(90deg,${cardBg} 0%,rgba(255,255,255,0.05) 50%,${cardBg} 100%)`,
+                  backgroundSize:"200% 100%",
+                  animation:"shimmer 1.5s ease infinite"
+                }}/>
+              )}
+
+              {currentPhoto && (
                 <img
-                  src={slot.photo}
+                  key={currentPhoto}
+                  src={currentPhoto}
                   alt={slot.name}
                   onLoad={() => setPhotoLoaded(true)}
-                  onError={e => { e.target.style.display="none"; setPhotoLoaded(true); }}
-                  style={{width:"100%",height:"100%",objectFit:"cover",opacity:photoLoaded?1:0,transition:"opacity 0.4s ease"}}
+                  onError={handleErr}
+                  style={{
+                    position:"absolute",inset:0,
+                    width:"100%",height:"100%",objectFit:"cover",
+                    opacity: photoLoaded ? (isReal ? 1 : (isCompleted?0.08:0.55)) : 0,
+                    transition:"opacity 0.5s ease",
+                    animation: photoLoaded && !isCompleted ? "kenburns 22s ease-in-out infinite alternate" : "none",
+                    transformOrigin:"center",
+                  }}
                 />
-              );
-            }
-            const cat = (slot.category||"").toLowerCase();
-            const bgPhoto = CATEGORY_PHOTOS[cat] ||
-              Object.entries(CATEGORY_PHOTOS).find(([k]) => cat.includes(k))?.[1] ||
-              CITY_PHOTOS[city?.split(",")[0]?.trim()];
-            return bgPhoto ? (
-              <img src={bgPhoto} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:isCompleted?0.08:0.42}}/>
-            ) : null;
-          })()}
+              )}
 
-          {/* Readability gradient */}
-          <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.25) 0%,transparent 35%,rgba(0,0,0,0.8) 100%)"}}/>
+              {/* Readability gradient */}
+              <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.32) 0%,transparent 35%,rgba(0,0,0,0.82) 100%)",pointerEvents:"none"}}/>
 
-          {/* Top bar — single time chip (tap to edit) + must-do star */}
-          <div style={{position:"absolute",top:0,left:0,right:0,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={e=>e.stopPropagation()}>
-            <button onClick={openTimeEdit} aria-label={`Change time — currently ${slot.time}`} style={{background:"rgba(0,0,0,0.55)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.22)",color:"white",fontSize:12,fontWeight:700,padding:"6px 12px",borderRadius:18,cursor:"pointer",display:"flex",alignItems:"center",gap:6,letterSpacing:"0.01em"}}>
-              <span>{slot.time}</span><span style={{fontSize:9,opacity:0.7}}>▾</span>
-            </button>
-            {slot.highlight && (
-              <span style={{background:T.gold,color:"white",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:12,letterSpacing:"0.02em",boxShadow:"0 2px 8px rgba(196,154,60,0.4)"}}>★ Must-do</span>
-            )}
-          </div>
+              {/* Top bar */}
+              <div style={{position:"absolute",top:0,left:0,right:0,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",zIndex:2}} onClick={e=>e.stopPropagation()}>
+                <button onClick={openTimeEdit} aria-label={`Change time — currently ${slot.time}`} style={{background:"rgba(0,0,0,0.55)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.22)",color:"white",fontSize:12,fontWeight:700,padding:"6px 12px",borderRadius:18,cursor:"pointer",display:"flex",alignItems:"center",gap:6,letterSpacing:"0.01em"}}>
+                  <span>{slot.time}</span><span style={{fontSize:9,opacity:0.7}}>▾</span>
+                </button>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  {slot.rating && (
+                    <span style={{background:"rgba(0,0,0,0.55)",backdropFilter:"blur(8px)",color:"white",fontSize:11,fontWeight:700,padding:"4px 9px",borderRadius:12,display:"flex",alignItems:"center",gap:3}}>
+                      <span style={{color:T.gold}}>★</span>{Number(slot.rating).toFixed(1)}
+                    </span>
+                  )}
+                  {slot.highlight && (
+                    <span style={{background:T.gold,color:"white",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:12,letterSpacing:"0.02em",boxShadow:"0 2px 8px rgba(196,154,60,0.4)"}}>★ Must-do</span>
+                  )}
+                </div>
+              </div>
 
-          {/* Place name + neighborhood · price */}
-          <div style={{position:"absolute",bottom:18,left:18,right:18}}>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:700,color:"white",lineHeight:1.15,marginBottom:6,textShadow:"0 2px 10px rgba(0,0,0,0.45)"}}>{slot.name}</div>
-            <div style={{fontSize:12,color:"rgba(255,255,255,0.78)",display:"flex",alignItems:"center",gap:6}}>
-              <span>📍 {slot.neighborhood}</span>
-              {slot.price && <><span style={{opacity:0.4}}>·</span><span style={{fontWeight:600}}>{slot.price}</span></>}
+              {/* Photo dot indicator (only when real photos rotate) */}
+              {realPhotos.length > 1 && (
+                <div style={{position:"absolute",top:62,right:16,display:"flex",gap:4,zIndex:2}} onClick={e=>e.stopPropagation()}>
+                  {realPhotos.slice(0,5).map((_, i) => (
+                    <div key={i} style={{width:5,height:5,borderRadius:"50%",background: i === Math.min(photoIdx, realPhotos.length-1) ? "white" : "rgba(255,255,255,0.45)",transition:"all 0.2s"}}/>
+                  ))}
+                </div>
+              )}
+
+              {/* Place name + neighborhood · price */}
+              <div style={{position:"absolute",bottom:18,left:18,right:18,zIndex:2}}>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:700,color:"white",lineHeight:1.15,marginBottom:6,textShadow:"0 2px 10px rgba(0,0,0,0.5)"}}>{slot.name}</div>
+                <div style={{fontSize:12,color:"rgba(255,255,255,0.82)",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                  <span>📍 {slot.neighborhood}</span>
+                  {slot.price && <><span style={{opacity:0.45}}>·</span><span style={{fontWeight:600}}>{slot.price}</span></>}
+                  {slot.rating_count && <><span style={{opacity:0.45}}>·</span><span style={{opacity:0.75}}>{slot.rating_count.toLocaleString()} reviews</span></>}
+                </div>
+              </div>
+
+              {/* Photo source hint — only if we're on the fallback */}
+              {!isReal && photos.length > 0 && (
+                <div style={{position:"absolute",bottom:6,right:10,fontSize:9,color:"rgba(255,255,255,0.35)",zIndex:2,letterSpacing:"0.05em"}}>stock photo</div>
+              )}
             </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Content area */}
         <div style={{padding:"18px 20px 18px",flex:1,display:"flex",flexDirection:"column",gap:12,background:isCompleted?"#f8f8f8":"transparent"}}>
@@ -234,7 +305,10 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
             const mode = nextSlot?.transit_mode || "walk";
             const mins = (nextSlot?.transit_from_prev||"").match(/\d+/)?.[0];
             if (!nextSlot?.transit_from_prev) return null;
-            const isRideshare = mode === "uber" || mode === "lyft";
+            const distMi = haversineMiles(slot?.lat, slot?.lng, nextSlot?.lat, nextSlot?.lng);
+            const distLabel = distMi != null
+              ? (distMi < 0.1 ? `${Math.round(distMi * 5280)} ft` : `${distMi.toFixed(distMi < 10 ? 1 : 0)} mi`)
+              : null;
             return (
               <div style={{display:"flex",alignItems:"center",gap:10,borderRadius:10,padding:"8px 12px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)"}}>
                 {mode==="uber" ? (
@@ -248,12 +322,13 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
                 ) : (
                   <span style={{fontSize:16,lineHeight:1,flexShrink:0}}>{TRANSIT_ICONS[mode]||"🚶"}</span>
                 )}
-                <div style={{flex:1,fontSize:12,color:"rgba(255,255,255,0.75)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                <div style={{flex:1,minWidth:0,fontSize:12,color:"rgba(255,255,255,0.75)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                   <span style={{fontWeight:700,color:"white"}}>{mins} min</span>
+                  {distLabel && <span style={{opacity:0.55}}> · {distLabel}</span>}
                   <span style={{opacity:0.6}}> to </span>
                   <span style={{fontWeight:600}}>{nextSlot.name}</span>
                 </div>
-                <span style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>→</span>
+                <span style={{fontSize:11,color:"rgba(255,255,255,0.4)",flexShrink:0}}>→</span>
               </div>
             );
           })()}
@@ -323,6 +398,47 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
           <div style={{fontSize:12,color:"rgba(255,255,255,0.6)"}}>Tap to dismiss</div>
         </div>
       )}
+
+      {/* Lightbox — full-screen photo gallery */}
+      {lightbox && (() => {
+        const realPhotos = (Array.isArray(slot.photos) && slot.photos.length > 0) ? slot.photos : (slot.photo ? [slot.photo] : []);
+        const fallback = pickFallbackPhoto(slot, city);
+        const photos = realPhotos.length > 0 ? realPhotos : (fallback ? [fallback] : []);
+        if (photos.length === 0) return null;
+        const idx = Math.min(photoIdx, photos.length - 1);
+        const prev = () => setPhotoIdx((idx - 1 + photos.length) % photos.length);
+        const next = () => setPhotoIdx((idx + 1) % photos.length);
+        return (
+          <div
+            onClick={()=>setLightbox(false)}
+            style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.96)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",animation:"fadeIn 0.2s ease"}}>
+            <button
+              onClick={(e)=>{e.stopPropagation();setLightbox(false);}}
+              aria-label="Close"
+              style={{position:"absolute",top:"env(safe-area-inset-top,16px)",right:16,width:40,height:40,borderRadius:"50%",background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.18)",color:"white",fontSize:20,cursor:"pointer",zIndex:2,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+            <img
+              src={photos[idx]}
+              alt={slot.name}
+              onClick={e=>e.stopPropagation()}
+              style={{maxWidth:"100%",maxHeight:"90vh",objectFit:"contain",animation:"fadeIn 0.2s ease"}}
+            />
+            {photos.length > 1 && (
+              <>
+                <button onClick={(e)=>{e.stopPropagation();prev();}} aria-label="Previous photo"
+                  style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",width:44,height:44,borderRadius:"50%",background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.18)",color:"white",fontSize:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+                <button onClick={(e)=>{e.stopPropagation();next();}} aria-label="Next photo"
+                  style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:44,height:44,borderRadius:"50%",background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.18)",color:"white",fontSize:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+                <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,16px) + 20px)",left:0,right:0,display:"flex",gap:6,justifyContent:"center"}}>
+                  {photos.map((_,i)=>(
+                    <div key={i} style={{width:i===idx?18:6,height:6,borderRadius:3,background:i===idx?"white":"rgba(255,255,255,0.4)",transition:"all 0.2s"}}/>
+                  ))}
+                </div>
+              </>
+            )}
+            <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,16px) + 48px)",left:0,right:0,textAlign:"center",color:"rgba(255,255,255,0.85)",fontSize:13,fontWeight:600,padding:"0 20px",textShadow:"0 1px 6px rgba(0,0,0,0.6)"}}>{slot.name}</div>
+          </div>
+        );
+      })()}
 
       {editingTime && (
         <div style={{position:"fixed",inset:0,background:"rgba(28,22,18,0.7)",zIndex:400,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn 0.2s ease"}} onClick={()=>setEditingTime(false)}>
