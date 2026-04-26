@@ -198,48 +198,53 @@ function MapView({ day, activeDay, city, ratings, onSlotSelect }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", paddingBottom: NAV_H + 20, fontFamily: "'DM Sans',sans-serif" }}>
 
-      {/* Map */}
+      {/* ── Map (no overlays) ── */}
       <div style={{ position: "relative" }}>
         <div ref={mapRef} style={{ height: 340, width: "100%", background: T.paper }} />
-
-        {/* Loading overlay */}
         {!leafletReady && (
           <div style={{ position: "absolute", inset: 0, background: T.paper, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: T.inkFaint }}>
             <div style={{ animation: "pulse 1.5s ease infinite" }}>Loading map…</div>
           </div>
         )}
+      </div>
 
-        {/* Legend pill — top-left over the map */}
-        <div style={{ position: "absolute", top: 10, left: 10, zIndex: 1000, display: "flex", gap: 4 }}>
+      {/* ── Legend strip — lives BELOW the map so popups are never blocked ── */}
+      <div style={{ padding: "10px 16px 8px", borderBottom: `1px solid ${T.dust}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {Object.entries(BUCKET_COLORS).map(([b, color]) => (
-            <div key={b} style={{ display: "flex", alignItems: "center", gap: 4, background: "white", borderRadius: 20, padding: "3px 9px", boxShadow: "0 1px 6px rgba(0,0,0,0.15)", fontSize: 11, fontWeight: 700, color: T.inkLight }}>
+            <div key={b} style={{ display: "flex", alignItems: "center", gap: 5, background: T.white, borderRadius: 20, padding: "4px 10px", border: `1px solid ${T.dust}`, fontSize: 11, fontWeight: 700, color: T.inkLight }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
-              {BUCKET_LABELS[b]}
+              {BUCKET_ICONS[b]} {BUCKET_LABELS[b]}
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Stop list header */}
-      <div style={{ padding: "14px 16px 6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontSize: 11, fontWeight: 800, color: T.inkFaint, textTransform: "uppercase", letterSpacing: "0.14em" }}>
-          {slots.length} stop{slots.length !== 1 ? "s" : ""} · tap to zoom
-        </div>
         {selectedIdx !== null && (
-          <button onClick={() => { setSelectedIdx(null); leafletMapRef.current?.fitBounds(window.L?.latLngBounds(slots.map(s => [s.lat, s.lng])), { padding: [48, 32] }); }}
-            style={{ fontSize: 11, fontWeight: 700, color: T.accent, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          <button
+            onClick={() => {
+              setSelectedIdx(null);
+              if (leafletMapRef.current && window.L) {
+                leafletMapRef.current.fitBounds(window.L.latLngBounds(slots.map(s => [s.lat, s.lng])), { padding: [48, 32] });
+              }
+            }}
+            style={{ fontSize: 11, fontWeight: 700, color: T.accent, background: "none", border: "none", cursor: "pointer", padding: 0, flexShrink: 0 }}>
             Show all
           </button>
         )}
       </div>
 
-      {/* Stop cards with transit connectors */}
-      <div ref={listRef} style={{ padding: "0 16px" }}>
+      {/* ── Stop count hint ── */}
+      <div style={{ padding: "10px 16px 4px" }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: T.inkFaint, textTransform: "uppercase", letterSpacing: "0.14em" }}>
+          {slots.length} stop{slots.length !== 1 ? "s" : ""} · tap to zoom in
+        </div>
+      </div>
+
+      {/* ── Stop cards with transit connectors ── */}
+      <div ref={listRef} style={{ padding: "4px 16px 0" }}>
         {slots.map((slot, i) => {
           const userRating = ratings[`${activeDay}-${i}`];
           const isCompleted = userRating !== undefined;
-          const bucket = getBucket(slot.time);
-          const bc = BUCKET_COLORS[bucket];
+          const bc = BUCKET_COLORS[getBucket(slot.time)];
           const ratingColor = isCompleted
             ? (userRating >= 9 ? "#22c55e" : userRating >= 7 ? "#84cc16" : userRating >= 5 ? "#eab308" : userRating >= 3 ? "#f97316" : "#ef4444")
             : null;
@@ -262,23 +267,20 @@ function MapView({ day, activeDay, city, ratings, onSlotSelect }) {
                 }}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", gap: 12,
-                  padding: "12px 14px", borderRadius: 16, marginBottom: 0,
+                  padding: "12px 14px", borderRadius: 16,
                   background: isSelected ? `${markerColor}10` : T.white,
                   border: `${isSelected ? "2px" : "1.5px"} solid ${isSelected ? markerColor : T.dust}`,
                   cursor: "pointer", textAlign: "left",
                   boxShadow: isSelected ? `0 4px 16px ${markerColor}25` : "none",
                   transition: "all 0.15s",
                 }}>
-
                 {/* Number badge */}
                 <div style={{
-                  width: 36, height: 36, borderRadius: "50%",
-                  background: markerColor,
+                  width: 36, height: 36, borderRadius: "50%", background: markerColor,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   flexShrink: 0, fontSize: 14, fontWeight: 800, color: "white",
                   boxShadow: isSelected ? `0 2px 8px ${markerColor}50` : "none",
                 }}>{i + 1}</div>
-
                 {/* Main info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
@@ -293,15 +295,22 @@ function MapView({ day, activeDay, city, ratings, onSlotSelect }) {
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 11, color: T.inkFaint }}>{slot.time}</span>
-                    {slot.neighborhood && <><span style={{ fontSize: 11, color: T.dust }}>·</span><span style={{ fontSize: 11, color: T.inkFaint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{slot.neighborhood}</span></>}
-                    {slot.rating && <><span style={{ fontSize: 11, color: T.dust }}>·</span><span style={{ fontSize: 11, fontWeight: 700, color: T.gold }}>★ {Number(slot.rating).toFixed(1)}</span></>}
+                    {slot.neighborhood && (
+                      <><span style={{ fontSize: 11, color: T.dust }}>·</span>
+                      <span style={{ fontSize: 11, color: T.inkFaint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{slot.neighborhood}</span></>
+                    )}
+                    {slot.rating && (
+                      <><span style={{ fontSize: 11, color: T.dust }}>·</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: T.gold }}>★ {Number(slot.rating).toFixed(1)}</span></>
+                    )}
                   </div>
                 </div>
-
-                {/* Photo thumb or highlight badge */}
+                {/* Photo / highlight / user rating */}
                 <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                   {slot.photos?.[0] ? (
-                    <img src={slot.photos[0]} alt={slot.name} style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover" }} onError={e => e.target.style.display = "none"} />
+                    <img src={slot.photos[0]} alt={slot.name}
+                      style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover" }}
+                      onError={e => e.target.style.display = "none"} />
                   ) : slot.highlight ? (
                     <div style={{ fontSize: 9, fontWeight: 800, color: T.gold, background: "#c49a3c18", borderRadius: 8, padding: "2px 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>★ Must-do</div>
                   ) : null}
@@ -313,10 +322,8 @@ function MapView({ day, activeDay, city, ratings, onSlotSelect }) {
 
               {/* Transit connector between stops */}
               {i < slots.length - 1 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 0, padding: "0 17px", height: 28 }}>
-                  {/* Vertical line segment */}
+                <div style={{ display: "flex", alignItems: "center", padding: "0 17px", height: 28 }}>
                   <div style={{ width: 2, height: "100%", background: T.dust, marginLeft: 17, flexShrink: 0 }} />
-                  {/* Transit pill */}
                   {nextSlot?.transit_from_prev && (
                     <div style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: 10, background: T.paper, borderRadius: 20, padding: "2px 10px", border: `1px solid ${T.dust}` }}>
                       <span style={{ fontSize: 11 }}>{TRANSIT_ICONS[nextSlot.transit_mode || "walk"] || "🚶"}</span>
