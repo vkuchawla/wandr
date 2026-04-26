@@ -335,6 +335,38 @@ function MomentCards({ day, activeDay, ratings, activeSlot, checkIn, checkOut, s
 
           <div style={{flex:1}}/>
 
+          {/* Booking links — category smart */}
+          {(() => {
+            const cat = (slot.category || "").toLowerCase();
+            const name = encodeURIComponent(slot.name);
+            const cityQ = encodeURIComponent(city?.split(",")[0] || "");
+            const isFood = /restaurant|cafe|bar|bistro|food|dining|brunch|breakfast|izakaya|ramen|sushi|tavern|pub/.test(cat);
+            const isActivity = /museum|gallery|tour|activity|landmark|temple|shrine|park|castle|attraction|entertainment|theatre|theater|zoo/.test(cat);
+            const isHotel = /hotel|accommodation|lodge|resort|hostel|ryokan|inn/.test(cat);
+            const links = [];
+            if (isFood) {
+              links.push({ label:"Reserve", icon:"🍽", url:`https://resy.com/cities/${cityQ.toLowerCase().replace(/%20/g,"-")}?query=${name}`, color:"#c84b2f", bg:"rgba(200,75,47,0.15)" });
+              links.push({ label:"OpenTable", icon:"📋", url:`https://www.opentable.com/s?term=${name}+${cityQ}`, color:"#da3743", bg:"rgba(218,55,67,0.1)" });
+            } else if (isActivity) {
+              links.push({ label:"Book tickets", icon:"🎟", url:`https://www.viator.com/search/${name}+${cityQ}`, color:"#b06000", bg:"rgba(176,96,0,0.12)" });
+              links.push({ label:"GetYourGuide", icon:"🎫", url:`https://www.getyourguide.com/s/?q=${name}+${cityQ}`, color:"#f5a623", bg:"rgba(245,166,35,0.12)" });
+            } else if (isHotel) {
+              links.push({ label:"Find rooms", icon:"🏨", url:`https://www.booking.com/searchresults.html?ss=${name}+${cityQ}`, color:"#003580", bg:"rgba(0,53,128,0.1)" });
+            }
+            if (links.length === 0) return null;
+            return (
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {links.map((link, i) => (
+                  <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    style={{display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:20,background:link.bg,border:`1px solid ${link.color}30`,color:link.color,fontSize:12,fontWeight:700,textDecoration:"none",flexShrink:0}}>
+                    <span>{link.icon}</span><span>{link.label}</span>
+                  </a>
+                ))}
+              </div>
+            );
+          })()}
+
           {/* Action row — primary CTA + two icon buttons */}
           <div style={{display:"flex",gap:8,alignItems:"stretch"}} onClick={e=>e.stopPropagation()}>
             {isCompleted ? (

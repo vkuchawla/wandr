@@ -1,5 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { OnboardingSplash } from "./OnboardingSplash.jsx";
+import { PublicTrip } from "./PublicTrip.jsx";
 
 const BACKEND = import.meta.env.VITE_BACKEND || (import.meta.env.PROD ? "https://wandr-62i6.onrender.com" : "");
 
@@ -33,6 +34,62 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqdXR0dGpqcHRta2h5cXhveXRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NTA4MzgsImV4cCI6MjA4OTAyNjgzOH0.kac5jh8nTs_IoruG2GlNkGWpRWZsyw_XcUj0hQmcdZ4"
 );
 
+// Public trip URL detection — module-level so it's stable across renders
+const publicTripId = window.location.pathname.match(/^\/trip\/([^/]+)$/)?.[1] || null;
+
+// Free tier limit
+const FREE_TRIP_LIMIT = 3;
+
+// UpgradeModal — shown when free user hits trip limit
+function UpgradeModal({ onClose }) {
+  const PERKS = [
+    ["✦", "Unlimited trips", "Save as many itineraries as you want"],
+    ["🗺", "Offline maps", "Access your route anywhere, no wifi needed"],
+    ["📅", "Calendar export", "Sync every stop to Google Calendar"],
+    ["⚡", "Priority generation", "Shorter waits, faster AI"],
+    ["🎨", "Exclusive moods", "Unlock hidden vibe categories"],
+  ];
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(28,22,18,0.72)", zIndex:2000, display:"flex", alignItems:"flex-end", justifyContent:"center", fontFamily:"'DM Sans',sans-serif" }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:T.cream, borderRadius:"28px 28px 0 0", padding:"32px 24px 48px", width:"100%", maxWidth:480, boxShadow:"0 -8px 48px rgba(28,22,18,0.25)" }}>
+        {/* Header */}
+        <div style={{ textAlign:"center", marginBottom:24 }}>
+          <div style={{ fontSize:44, lineHeight:1, marginBottom:10 }}>✦</div>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:28, fontWeight:900, color:T.ink, marginBottom:4 }}>WANDR Pro</div>
+          <div style={{ fontSize:13, color:T.inkFaint }}>You've used your 3 free trips. Upgrade to keep exploring.</div>
+        </div>
+        {/* Perks */}
+        <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:22 }}>
+          {PERKS.map(([icon, title, desc]) => (
+            <div key={title} style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 14px", background:T.white, borderRadius:14, border:`1px solid ${T.dust}` }}>
+              <span style={{ fontSize:18, width:24, textAlign:"center" }}>{icon}</span>
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{title}</div>
+                <div style={{ fontSize:11, color:T.inkFaint }}>{desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Pricing */}
+        <div style={{ textAlign:"center", marginBottom:18 }}>
+          <span style={{ fontFamily:"'Playfair Display',serif", fontSize:40, fontWeight:900, color:T.ink }}>$4.99</span>
+          <span style={{ fontSize:15, color:T.inkFaint }}> / month</span>
+          <div style={{ fontSize:11, color:T.inkFaint, marginTop:4 }}>Cancel anytime · Billed monthly</div>
+        </div>
+        {/* CTA */}
+        <button
+          onClick={() => window.open("https://buy.stripe.com/wandr-pro", "_blank")}
+          style={{ width:"100%", padding:"16px 0", borderRadius:16, background:`linear-gradient(135deg, ${T.gold}, #8a6520)`, border:"none", color:"white", fontSize:16, fontWeight:800, cursor:"pointer", marginBottom:10, boxShadow:"0 6px 24px rgba(196,154,60,0.35)" }}>
+          Upgrade to Pro →
+        </button>
+        <button onClick={onClose} style={{ width:"100%", padding:"13px 0", borderRadius:14, background:"transparent", border:`1.5px solid ${T.dust}`, color:T.inkLight, fontSize:14, fontWeight:600, cursor:"pointer" }}>
+          Maybe later
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Screens that can be safely restored on reload
 const RESTORABLE = new Set(["home","explore","social","saved","profile","itinerary","trip-detail","city","mood"]);
 
@@ -64,6 +121,7 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [user, setUser]             = useState(null);
   const [authGate, setAuthGate]     = useState(null); // null | "save" | "social"
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   // Persist nav context to sessionStorage whenever it changes
   useEffect(() => {
@@ -138,7 +196,7 @@ export default function App() {
   const loadProfile = async (userId) => {
     const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
     if (data) {
-      setProfile({ name: data.name, answers: data.answers, travelDna: data.travel_dna });
+      setProfile({ name: data.name, answers: data.answers, travelDna: data.travel_dna, isPro: !!data.is_pro });
       // Restore last screen if available, otherwise go home
       setScreen(prev => {
         if (!["loading","auth","onboarding"].includes(prev)) return prev;
@@ -205,6 +263,13 @@ export default function App() {
   };
 
   const handleSaveTrip = async (trip) => {
+    // Free tier gate: max 3 saved trips for non-Pro users
+    const alreadySaved = savedTrips.some(t => t.city === trip.city && t.dates === trip.dates);
+    if (!profile?.isPro && !alreadySaved && savedTrips.length >= FREE_TRIP_LIMIT) {
+      setShowUpgrade(true);
+      return;
+    }
+
     // Always save locally first
     const localTrip = { ...trip, saved_at: new Date().toISOString() };
     setSavedTrips(prev => [localTrip, ...prev.filter(t => !(t.city === trip.city && t.dates === trip.dates))]);
@@ -257,6 +322,18 @@ export default function App() {
     setOpenTrip(trip);
     setScreen("trip-detail");
   };
+
+  // Public trip view — render outside normal app shell, no nav/auth required
+  if (publicTripId) {
+    return (
+      <div style={{width:"100%",minHeight:"100vh",background:"#e8e0d0",display:"flex",justifyContent:"center"}}>
+        <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
+        <div style={{width:"100%",maxWidth:480,minHeight:"100vh",background:T.cream,position:"relative",boxShadow:"0 0 80px rgba(28,22,18,0.15)"}}>
+          <PublicTrip tripId={publicTripId} supabase={supabase} onPlanOwn={()=>{ window.history.pushState({},"","/"); window.location.reload(); }}/>
+        </div>
+      </div>
+    );
+  }
 
   if (screen === "loading") return (
     <div style={{width:"100%",minHeight:"100vh",background:T.ink,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -325,6 +402,7 @@ export default function App() {
         )}
         <NavBar screen={screen} setScreen={setScreen}/>
         {authGate && <AuthGateModal supabase={supabase} reason={authGate} onClose={()=>setAuthGate(null)}/>}
+        {showUpgrade && <UpgradeModal onClose={()=>setShowUpgrade(false)}/>}
       </div>
     </div>
   );

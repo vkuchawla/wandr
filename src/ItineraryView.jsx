@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { GLOBAL_CSS, NAV_H, T, TRANSIT_COLORS, TRANSIT_ICONS, CITY_PHOTOS } from "./constants.jsx";
 import { MomentCards } from "./MomentCards.jsx";
 import { PlanMode } from "./PlanMode.jsx";
+import { MapView } from "./MapView.jsx";
 import { PlaceSheet } from "./PlaceSheet.jsx";
 import { ShareCard } from "./ShareCard.jsx";
 import { RatingSheet } from "./RatingSheet.jsx";
@@ -735,7 +736,7 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
                       .eq("user_id", user.id).eq("city", city).order("saved_at", {ascending:false}).limit(1);
                     const id = data?.[0]?.id;
                     if (id) {
-                      const url = `${window.location.origin}${window.location.pathname}?trip=${id}`;
+                      const url = `${window.location.origin}/trip/${id}`;
                       navigator.clipboard.writeText(url).catch(()=>{});
                       setSavedTripId(id);
                       setLinkCopied(true);
@@ -804,17 +805,6 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
         </div>
         {/* Mode toggle */}
         <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-          {/* Open today's route in Google Maps */}
-          {day?.slots?.length > 1 && (() => {
-            const stops = day.slots.map(s => encodeURIComponent(`${s.name}, ${city}`));
-            const mapsUrl = `https://www.google.com/maps/dir/${stops.join("/")}`;
-            return (
-              <a href={mapsUrl} target="_blank" rel="noreferrer"
-                style={{padding:"5px 10px",borderRadius:16,background:T.paper,border:`1px solid ${T.dust}`,color:T.inkLight,fontSize:11,fontWeight:700,textDecoration:"none",display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-                🗺 Route
-              </a>
-            );
-          })()}
           {/* Add to Calendar */}
           {day && (() => {
             const calDate = getCalendarDate(dates, activeDay);
@@ -843,11 +833,15 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
           })()}
           <div style={{display:"flex",background:T.paper,borderRadius:20,padding:3,gap:2,border:`1px solid ${T.dust}`}}>
             <button onClick={()=>setViewMode("story")}
-              style={{padding:"5px 12px",borderRadius:16,background:viewMode==="story"?T.ink:"transparent",border:"none",color:viewMode==="story"?"white":T.inkFaint,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+              style={{padding:"5px 11px",borderRadius:16,background:viewMode==="story"?T.ink:"transparent",border:"none",color:viewMode==="story"?"white":T.inkFaint,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
               ▶ Story
             </button>
+            <button onClick={()=>setViewMode("map")}
+              style={{padding:"5px 11px",borderRadius:16,background:viewMode==="map"?T.ink:"transparent",border:"none",color:viewMode==="map"?"white":T.inkFaint,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+              🗺 Map
+            </button>
             <button onClick={()=>setViewMode("plan")}
-              style={{padding:"5px 12px",borderRadius:16,background:viewMode==="plan"?T.ink:"transparent",border:"none",color:viewMode==="plan"?"white":T.inkFaint,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+              style={{padding:"5px 11px",borderRadius:16,background:viewMode==="plan"?T.ink:"transparent",border:"none",color:viewMode==="plan"?"white":T.inkFaint,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
               ☰ Plan
             </button>
           </div>
@@ -898,6 +892,17 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
               i === activeDay ? { ...d, slots: newSlots } : d
             ));
           }}
+        />
+      )}
+
+      {/* Map mode — interactive Leaflet map */}
+      {viewMode === "map" && (
+        <MapView
+          day={day}
+          activeDay={activeDay}
+          city={city}
+          ratings={ratings}
+          onSlotSelect={(idx) => {}}
         />
       )}
 

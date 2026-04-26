@@ -238,8 +238,16 @@ function ProfileScreen({ profile, onSaveProfile, isOnboarding = false, supabase,
             <div style={{width:68,height:68,borderRadius:"50%",background:`linear-gradient(135deg,${T.accent},#9b2020)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,fontWeight:800,color:"white",flexShrink:0,border:"3px solid rgba(255,255,255,0.1)"}}>
               {(profile?.name||name)?.[0]?.toUpperCase()||"?"}
             </div>
-            <div>
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:"white",lineHeight:1.1,marginBottom:6}}>{profile?.name||name}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:"white",lineHeight:1.1}}>{profile?.name||name}</div>
+                {profile?.isPro && (
+                  <div style={{display:"inline-flex",alignItems:"center",gap:4,background:"linear-gradient(135deg,#c49a3c,#8a6520)",borderRadius:20,padding:"2px 9px",border:"1px solid rgba(196,154,60,0.4)"}}>
+                    <span style={{fontSize:9}}>✦</span>
+                    <span style={{fontSize:10,fontWeight:800,color:"white",letterSpacing:"0.05em"}}>PRO</span>
+                  </div>
+                )}
+              </div>
               <div style={{display:"inline-flex",alignItems:"center",gap:5,background:"rgba(255,255,255,0.08)",borderRadius:20,padding:"3px 10px",border:"1px solid rgba(255,255,255,0.1)"}}>
                 <span style={{fontSize:12}}>{dnaData.emoji}</span>
                 <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.7)"}}>{dnaData.label}</span>
@@ -276,6 +284,25 @@ function ProfileScreen({ profile, onSaveProfile, isOnboarding = false, supabase,
             ))}
           </div>
         </div>
+
+        {/* WANDR Pro upsell — only for free users */}
+        {!profile?.isPro && (
+          <div style={{borderRadius:18,overflow:"hidden",marginBottom:14,background:"linear-gradient(135deg,#1c1612,#2d1f10)",border:`1px solid rgba(196,154,60,0.25)`,padding:"18px 18px 16px",position:"relative"}}>
+            <div style={{position:"absolute",top:-8,right:-8,fontSize:72,opacity:0.06,color:T.gold}}>✦</div>
+            <div style={{fontSize:10,fontWeight:800,letterSpacing:"0.14em",textTransform:"uppercase",color:T.gold,marginBottom:6}}>✦ WANDR PRO</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:700,color:"white",marginBottom:4}}>Unlock the full experience</div>
+            <div style={{fontSize:12,color:"rgba(255,255,255,0.55)",lineHeight:1.6,marginBottom:14}}>Unlimited trips, offline maps, calendar export — $4.99/mo</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+              {["Unlimited trips","Offline maps","Calendar export","Priority AI"].map(f=>(
+                <span key={f} style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.65)",background:"rgba(255,255,255,0.07)",borderRadius:20,padding:"3px 9px",border:"1px solid rgba(255,255,255,0.1)"}}>{f}</span>
+              ))}
+            </div>
+            <button onClick={()=>window.open("https://buy.stripe.com/wandr-pro","_blank")}
+              style={{padding:"10px 20px",borderRadius:12,background:`linear-gradient(135deg,${T.gold},#8a6520)`,border:"none",color:"white",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:"0 4px 16px rgba(196,154,60,0.3)"}}>
+              Upgrade to Pro →
+            </button>
+          </div>
+        )}
 
         {/* Recent trips */}
         {tripCount > 0 && (
