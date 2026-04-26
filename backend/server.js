@@ -291,14 +291,16 @@ VIBE GUIDE:
 - Chill Afternoon: A park bench, a bookshop, a canal-side cafe. The antidote to over-tourism.
 
 PLACE QUALITY MANDATE — THIS IS THE MOST IMPORTANT RULE:
-You must recommend the BEST places in ${city} — not just good places, not just nearby places, THE BEST. Think:
-- Restaurants: Michelin-starred, James Beard winners, Condé Nast-featured, on "World's 50 Best" lists, or the single most acclaimed local institution in their category
-- Cafes: The one specialty coffee shop that serious coffee people fly to ${city} for
-- Museums / galleries: The iconic institution PLUS one hidden gem that insiders know
-- Bars: The bar that regulars consider the city's finest — great cocktails, atmosphere, story
-- Markets: The market that has been operating for decades and locals actually shop at
-- Experiences: The one thing in ${city} that people say "you HAVE to do this"
-Every slot should feel like a recommendation from someone who has lived in ${city} for 10 years and knows every secret. If you wouldn't send your most well-traveled friend there, don't recommend it. NEVER recommend a place just because it's convenient or nearby — quality always wins.
+Every recommended place MUST meet this bar: it would have a Google rating of 4.3 stars or higher with at least hundreds of reviews, OR it is a critically acclaimed institution that serious travellers seek out. Do NOT recommend any place you are not highly confident is well-regarded. Think:
+- Restaurants: Michelin-starred, Bib Gourmand, James Beard nominated, on "World's 50 Best" or "Asia's 50 Best" lists, or the single most iconic local restaurant that visitors specifically fly in for. Every restaurant must be reservation-worthy.
+- Cafes: The specialty coffee destination with a cult following — the one that appears on "best coffee in ${city}" lists. Never a generic or unknown cafe.
+- Museums / galleries: The world-class anchor institution (e.g. the Met, the Louvre, Uffizi) AND one critically lauded smaller gallery if vibes allow.
+- Bars / nightlife: Award-winning cocktail bars (Tales of the Cocktail nominees, World's 50 Best Bars), or the most iconic neighborhood bar that has defined the city's nightlife for decades.
+- Markets: Only markets that are famous city-wide and have operated for many years — not pop-up or unknown markets.
+- Experiences / landmarks: The iconic, unmissable experiences that appear in every serious travel guide to ${city} — the ones visitors regret missing.
+- Parks / outdoor: City's most beautiful or famous green spaces, viewpoints, or waterfronts.
+POPULARITY CHECK: Before recommending a place, ask yourself — "Would a first-time visitor to ${city} be thrilled to go here? Would they photograph it and tell friends?" If not, pick somewhere better. Highly-rated, widely-loved places always win over obscure picks. Balance iconic landmarks with beloved local favourites — not tourist traps, but not so hidden that nobody goes.
+Every slot should feel like a curated recommendation from a 10-year local who also follows global food and travel media. If you wouldn't confidently text this recommendation to your most well-travelled friend, choose somewhere else.
 
 QUALITY RULES:
 - Every place name must be REAL and SPECIFIC. No generic "a local cafe" — name it.

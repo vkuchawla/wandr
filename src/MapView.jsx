@@ -12,8 +12,11 @@ const injectLeafletCss = () => {
   document.head.appendChild(link);
 };
 
-// Bucket colors for markers
+// Time-of-day buckets
 const BUCKET_COLORS = { morning: "#c49a3c", afternoon: "#4a7c59", evening: "#8b1a2f" };
+const BUCKET_LABELS = { morning: "Morning", afternoon: "Afternoon", evening: "Evening" };
+const BUCKET_ICONS  = { morning: "🌅", afternoon: "☀️", evening: "🌙" };
+
 const getBucket = (t) => {
   if (!t) return "morning";
   const h = parseInt(t.split(":")[0]);
@@ -22,19 +25,35 @@ const getBucket = (t) => {
   return hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
 };
 
+// Category emoji map
+const CAT_EMOJI = {
+  food: "🍽", restaurant: "🍽", cafe: "☕", coffee: "☕", bar: "🍸",
+  museum: "🏛", gallery: "🎨", landmark: "📍", park: "🌿",
+  market: "🛍", shopping: "🛍", activity: "🎯", experience: "✨",
+  hotel: "🏨", temple: "⛩", shrine: "⛩", nightlife: "🌙",
+};
+const getCatEmoji = (cat) => {
+  if (!cat) return "📍";
+  const c = cat.toLowerCase();
+  for (const [k, v] of Object.entries(CAT_EMOJI)) if (c.includes(k)) return v;
+  return "📍";
+};
+
 function MapView({ day, activeDay, city, ratings, onSlotSelect }) {
   const mapRef = useRef(null);
   const leafletMapRef = useRef(null);
   const markersRef = useRef([]);
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [leafletReady, setLeafletReady] = useState(false);
+  const listRef = useRef(null);
+  const cardRefs = useRef([]);
 
   const slots = (day?.slots || []).filter(s =>
     typeof s.lat === "number" && typeof s.lng === "number" &&
     Number.isFinite(s.lat) && Number.isFinite(s.lng)
   );
 
-  // Load Leaflet dynamically (heavy dep — only when map is shown)
+  // Load Leaflet dynamically
   useEffect(() => {
     injectLeafletCss();
     if (window.L) { setLeafletReady(true); return; }
@@ -44,12 +63,11 @@ function MapView({ day, activeDay, city, ratings, onSlotSelect }) {
     document.head.appendChild(script);
   }, []);
 
-  // Init / reinit map whenever slots or Leaflet readiness changes
+  // Build / rebuild map
   useEffect(() => {
     if (!leafletReady || !mapRef.current) return;
     const L = window.L;
 
-    // Destroy existing map instance before creating a new one
     if (leafletMapRef.current) {
       leafletMapRef.current.remove();
       leafletMapRef.current = null;
@@ -58,205 +76,256 @@ function MapView({ day, activeDay, city, ratings, onSlotSelect }) {
 
     if (slots.length === 0) return;
 
-    // Center on centroid of all points
     const avgLat = slots.reduce((s, p) => s + p.lat, 0) / slots.length;
     const avgLng = slots.reduce((s, p) => s + p.lng, 0) / slots.length;
 
     const map = L.map(mapRef.current, {
       center: [avgLat, avgLng],
       zoom: 14,
-      zoomControl: true,
+      zoomControl: false,        // we add it bottom-right below
       attributionControl: false,
     });
     leafletMapRef.current = map;
 
-    // Minimal attribution
-    L.control.attribution({ prefix: false, position: "bottomright" }).addTo(map);
+    // Zoom control bottom-right (out of the way on mobile)
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+    L.control.attribution({ prefix: false, position: "bottomleft" }).addTo(map);
 
-    // Tile layer — Carto Voyager (clean, no API key)
+    // Clean tile layer
     L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
       attribution: '© <a href="https://carto.com">CARTO</a>',
-      subdomains: "abcd",
-      maxZoom: 20,
+      subdomains: "abcd", maxZoom: 20,
     }).addTo(map);
 
-    // Draw route polyline
+    // Route polyline — solid, thicker, accent color
     const coords = slots.map(s => [s.lat, s.lng]);
-    L.polyline(coords, {
-      color: T.accent,
-      weight: 3,
-      opacity: 0.65,
-      dashArray: "6, 6",
-    }).addTo(map);
+    L.polyline(coords, { color: T.accent, weight: 4, opacity: 0.75, lineJoin: "round" }).addTo(map);
 
-    // Custom numbered markers
+    // Markers
     slots.forEach((slot, i) => {
-      const rating = ratings[`${activeDay}-${i}`];
-      const isCompleted = rating !== undefined;
-      const bc = BUCKET_COLORS[getBucket(slot.time)];
+      const userRating = ratings[`${activeDay}-${i}`];
+      const isCompleted = userRating !== undefined;
+      const bucket = getBucket(slot.time);
+      const bc = BUCKET_COLORS[bucket];
       const ratingColor = isCompleted
-        ? (rating >= 9 ? "#22c55e" : rating >= 7 ? "#84cc16" : rating >= 5 ? "#eab308" : rating >= 3 ? "#f97316" : "#ef4444")
+        ? (userRating >= 9 ? "#22c55e" : userRating >= 7 ? "#84cc16" : userRating >= 5 ? "#eab308" : userRating >= 3 ? "#f97316" : "#ef4444")
         : null;
       const markerColor = ratingColor || (slot.highlight ? T.gold : bc);
+      const isSelected = selectedIdx === i;
 
       const icon = L.divIcon({
         html: `<div style="
-          width:30px;height:30px;border-radius:50%;
+          width:${isSelected ? 38 : 32}px;height:${isSelected ? 38 : 32}px;
+          border-radius:50%;
           background:${markerColor};
-          border:2.5px solid white;
-          box-shadow:0 2px 8px rgba(0,0,0,0.35);
+          border:${isSelected ? "3px" : "2.5px"} solid white;
+          box-shadow:${isSelected ? "0 4px 16px rgba(0,0,0,0.45)" : "0 2px 8px rgba(0,0,0,0.3)"};
           display:flex;align-items:center;justify-content:center;
-          font-size:12px;font-weight:800;color:white;
-          font-family:'DM Sans',sans-serif;
-          cursor:pointer;transition:transform 0.15s;
+          font-size:${isSelected ? 14 : 12}px;font-weight:800;color:white;
+          font-family:'DM Sans',sans-serif;cursor:pointer;
+          transition:all 0.15s;
         ">${i + 1}</div>`,
         className: "",
-        iconSize: [30, 30],
-        iconAnchor: [15, 15],
-        popupAnchor: [0, -18],
+        iconSize: [isSelected ? 38 : 32, isSelected ? 38 : 32],
+        iconAnchor: [isSelected ? 19 : 16, isSelected ? 19 : 16],
+        popupAnchor: [0, isSelected ? -22 : -18],
       });
+
+      const cat = slot.category ? slot.category.charAt(0).toUpperCase() + slot.category.slice(1) : "";
+      const emoji = getCatEmoji(slot.category);
 
       const marker = L.marker([slot.lat, slot.lng], { icon })
         .addTo(map)
         .on("click", () => {
           setSelectedIdx(i);
           if (onSlotSelect) onSlotSelect(i);
+          // Scroll the stop card into view
+          cardRefs.current[i]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
         });
 
-      // Popup with slot summary
-      const cat = slot.category ? slot.category.charAt(0).toUpperCase() + slot.category.slice(1) : "";
       marker.bindPopup(
-        `<div style="font-family:'DM Sans',sans-serif;min-width:180px;max-width:240px">
-          <div style="font-weight:800;font-size:14px;color:#1c1612;margin-bottom:3px">${slot.name}</div>
-          <div style="font-size:11px;color:#5c4f3d;margin-bottom:6px">${slot.time || ""}${cat ? " · " + cat : ""}${slot.neighborhood ? " · " + slot.neighborhood : ""}</div>
-          ${slot.rating ? `<div style="display:inline-flex;align-items:center;gap:3px;background:#f5ede0;border-radius:8px;padding:2px 7px;font-size:11px;font-weight:700;color:#1c1612"><span style="color:#c49a3c">★</span>${Number(slot.rating).toFixed(1)}</div>` : ""}
-          ${slot.highlight ? `<div style="display:inline-flex;align-items:center;gap:3px;background:#c49a3c20;border-radius:8px;padding:2px 7px;font-size:10px;font-weight:700;color:#c49a3c;margin-left:4px">★ Must-do</div>` : ""}
+        `<div style="font-family:'DM Sans',sans-serif;min-width:200px;max-width:260px;padding:2px 0">
+          <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
+            <div style="width:32px;height:32px;border-radius:50%;background:${markerColor};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:white;flex-shrink:0">${i + 1}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:800;font-size:14px;color:#1c1612;line-height:1.2;margin-bottom:2px">${slot.name}</div>
+              <div style="font-size:11px;color:#a89880">${emoji} ${cat || "Stop"}${slot.neighborhood ? " · " + slot.neighborhood : ""}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <div style="background:#f5ede0;border-radius:8px;padding:3px 8px;font-size:11px;font-weight:700;color:#1c1612">🕐 ${slot.time || ""}</div>
+            ${slot.rating ? `<div style="background:#fff8ec;border-radius:8px;padding:3px 8px;font-size:11px;font-weight:700;color:#c49a3c">★ ${Number(slot.rating).toFixed(1)}</div>` : ""}
+            ${slot.highlight ? `<div style="background:#c49a3c20;border-radius:8px;padding:3px 8px;font-size:10px;font-weight:700;color:#c49a3c">Must-do</div>` : ""}
+          </div>
+          ${slot.must_know ? `<div style="margin-top:7px;font-size:11px;color:#5c4f3d;line-height:1.5;border-top:1px solid #f0e8dc;padding-top:6px">${slot.must_know}</div>` : ""}
         </div>`,
-        { maxWidth: 260, closeButton: false }
+        { maxWidth: 280, closeButton: false }
       );
 
       markersRef.current.push(marker);
     });
 
-    // Fit bounds with padding
+    // Fit to all points
     if (slots.length > 1) {
-      map.fitBounds(L.latLngBounds(coords), { padding: [40, 40] });
+      map.fitBounds(L.latLngBounds(coords), { padding: [48, 32] });
     }
 
     return () => {
-      if (leafletMapRef.current) {
-        leafletMapRef.current.remove();
-        leafletMapRef.current = null;
-      }
+      if (leafletMapRef.current) { leafletMapRef.current.remove(); leafletMapRef.current = null; }
     };
   }, [leafletReady, day?.day, activeDay]);
 
-  // No coords at all
+  // Reopen popup when selectedIdx changes externally
+  useEffect(() => {
+    if (selectedIdx !== null && markersRef.current[selectedIdx] && leafletMapRef.current) {
+      markersRef.current[selectedIdx].openPopup();
+    }
+  }, [selectedIdx]);
+
+  // Empty state
   if (slots.length === 0) {
     return (
-      <div style={{
-        padding: "48px 24px",
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        gap: 12, minHeight: 300, fontFamily: "'DM Sans',sans-serif",
-      }}>
+      <div style={{ padding: "48px 24px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, minHeight: 300, fontFamily: "'DM Sans',sans-serif" }}>
         <div style={{ fontSize: 40 }}>🗺</div>
         <div style={{ fontSize: 16, fontWeight: 700, color: T.ink }}>Map coming soon</div>
         <div style={{ fontSize: 13, color: T.inkFaint, textAlign: "center", maxWidth: 260, lineHeight: 1.6 }}>
-          Location data is added when you generate a new itinerary. Your next trip will show an interactive route map here.
+          Generate a new itinerary to see your route on an interactive map.
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", paddingBottom: NAV_H + 20 }}>
-      {/* Map container */}
-      <div
-        ref={mapRef}
-        style={{
-          height: 420,
-          width: "100%",
-          background: T.paper,
-          position: "relative",
-        }}
-      />
+    <div style={{ display: "flex", flexDirection: "column", paddingBottom: NAV_H + 20, fontFamily: "'DM Sans',sans-serif" }}>
 
-      {/* Loading overlay */}
-      {!leafletReady && (
-        <div style={{
-          position: "absolute", inset: 0, height: 420,
-          background: T.paper, display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: T.inkFaint,
-        }}>
-          <div style={{ animation: "pulse 1.5s ease infinite" }}>Loading map…</div>
-        </div>
-      )}
+      {/* Map */}
+      <div style={{ position: "relative" }}>
+        <div ref={mapRef} style={{ height: 340, width: "100%", background: T.paper }} />
 
-      {/* Stop list below map */}
-      <div style={{ padding: "16px 16px 0" }}>
-        <div style={{ fontSize: 10, fontWeight: 800, color: T.inkFaint, textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 12 }}>
-          {slots.length} mapped stop{slots.length !== 1 ? "s" : ""}
+        {/* Loading overlay */}
+        {!leafletReady && (
+          <div style={{ position: "absolute", inset: 0, background: T.paper, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: T.inkFaint }}>
+            <div style={{ animation: "pulse 1.5s ease infinite" }}>Loading map…</div>
+          </div>
+        )}
+
+        {/* Legend pill — top-left over the map */}
+        <div style={{ position: "absolute", top: 10, left: 10, zIndex: 1000, display: "flex", gap: 4 }}>
+          {Object.entries(BUCKET_COLORS).map(([b, color]) => (
+            <div key={b} style={{ display: "flex", alignItems: "center", gap: 4, background: "white", borderRadius: 20, padding: "3px 9px", boxShadow: "0 1px 6px rgba(0,0,0,0.15)", fontSize: 11, fontWeight: 700, color: T.inkLight }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+              {BUCKET_LABELS[b]}
+            </div>
+          ))}
         </div>
+      </div>
+
+      {/* Stop list header */}
+      <div style={{ padding: "14px 16px 6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: T.inkFaint, textTransform: "uppercase", letterSpacing: "0.14em" }}>
+          {slots.length} stop{slots.length !== 1 ? "s" : ""} · tap to zoom
+        </div>
+        {selectedIdx !== null && (
+          <button onClick={() => { setSelectedIdx(null); leafletMapRef.current?.fitBounds(window.L?.latLngBounds(slots.map(s => [s.lat, s.lng])), { padding: [48, 32] }); }}
+            style={{ fontSize: 11, fontWeight: 700, color: T.accent, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+            Show all
+          </button>
+        )}
+      </div>
+
+      {/* Stop cards with transit connectors */}
+      <div ref={listRef} style={{ padding: "0 16px" }}>
         {slots.map((slot, i) => {
-          const rating = ratings[`${activeDay}-${i}`];
-          const isCompleted = rating !== undefined;
-          const bc = BUCKET_COLORS[getBucket(slot.time)];
+          const userRating = ratings[`${activeDay}-${i}`];
+          const isCompleted = userRating !== undefined;
+          const bucket = getBucket(slot.time);
+          const bc = BUCKET_COLORS[bucket];
           const ratingColor = isCompleted
-            ? (rating >= 9 ? "#22c55e" : rating >= 7 ? "#84cc16" : rating >= 5 ? "#eab308" : rating >= 3 ? "#f97316" : "#ef4444")
+            ? (userRating >= 9 ? "#22c55e" : userRating >= 7 ? "#84cc16" : userRating >= 5 ? "#eab308" : userRating >= 3 ? "#f97316" : "#ef4444")
             : null;
           const markerColor = ratingColor || (slot.highlight ? T.gold : bc);
+          const isSelected = selectedIdx === i;
+          const nextSlot = slots[i + 1];
+          const emoji = getCatEmoji(slot.category);
 
           return (
-            <button
-              key={i}
-              onClick={() => {
-                setSelectedIdx(i);
-                if (markersRef.current[i] && leafletMapRef.current) {
-                  leafletMapRef.current.setView([slot.lat, slot.lng], 16, { animate: true });
-                  markersRef.current[i].openPopup();
-                }
-              }}
-              style={{
-                width: "100%", display: "flex", alignItems: "center", gap: 12,
-                padding: "10px 12px", borderRadius: 14, marginBottom: 6,
-                background: selectedIdx === i ? `${markerColor}12` : T.white,
-                border: `1.5px solid ${selectedIdx === i ? markerColor : T.dust}`,
-                cursor: "pointer", textAlign: "left", fontFamily: "'DM Sans',sans-serif",
-                transition: "all 0.15s",
-              }}>
-              {/* Number badge */}
-              <div style={{
-                width: 28, height: 28, borderRadius: "50%", background: markerColor,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                flexShrink: 0, fontSize: 12, fontWeight: 800, color: "white",
-              }}>{i + 1}</div>
-              {/* Info */}
-              <div style={{ flex: 1, minWidth: 0 }}>
+            <div key={i} ref={el => cardRefs.current[i] = el}>
+              {/* Stop card */}
+              <button
+                onClick={() => {
+                  setSelectedIdx(i);
+                  if (onSlotSelect) onSlotSelect(i);
+                  if (markersRef.current[i] && leafletMapRef.current) {
+                    leafletMapRef.current.setView([slot.lat, slot.lng], 16, { animate: true });
+                    markersRef.current[i].openPopup();
+                  }
+                }}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 12,
+                  padding: "12px 14px", borderRadius: 16, marginBottom: 0,
+                  background: isSelected ? `${markerColor}10` : T.white,
+                  border: `${isSelected ? "2px" : "1.5px"} solid ${isSelected ? markerColor : T.dust}`,
+                  cursor: "pointer", textAlign: "left",
+                  boxShadow: isSelected ? `0 4px 16px ${markerColor}25` : "none",
+                  transition: "all 0.15s",
+                }}>
+
+                {/* Number badge */}
                 <div style={{
-                  fontSize: 14, fontWeight: 700, color: isCompleted ? T.inkFaint : T.ink,
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  textDecoration: isCompleted ? "line-through" : "none",
-                }}>{slot.name}</div>
-                <div style={{ fontSize: 11, color: T.inkFaint, marginTop: 1 }}>
-                  {slot.time}{slot.neighborhood ? " · " + slot.neighborhood : ""}
-                </div>
-              </div>
-              {/* Transit to next */}
-              {i < slots.length - 1 && slot.transit_from_prev && (
-                <div style={{ fontSize: 10, color: T.inkFaint, flexShrink: 0, textAlign: "right" }}>
-                  <div>{TRANSIT_ICONS[slots[i + 1]?.transit_mode || "walk"] || "🚶"}</div>
-                  <div style={{ fontWeight: 600 }}>{(slots[i + 1]?.transit_from_prev || "").match(/\d+/)?.[0]}m</div>
-                </div>
-              )}
-              {/* Rating badge */}
-              {isCompleted && (
-                <div style={{
-                  width: 26, height: 26, borderRadius: "50%", background: ratingColor,
+                  width: 36, height: 36, borderRadius: "50%",
+                  background: markerColor,
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  flexShrink: 0, fontSize: 11, fontWeight: 900, color: "white",
-                }}>{rating}</div>
+                  flexShrink: 0, fontSize: 14, fontWeight: 800, color: "white",
+                  boxShadow: isSelected ? `0 2px 8px ${markerColor}50` : "none",
+                }}>{i + 1}</div>
+
+                {/* Main info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                    <span style={{ fontSize: 13 }}>{emoji}</span>
+                    <span style={{
+                      fontSize: 14, fontWeight: 700,
+                      color: isCompleted ? T.inkFaint : T.ink,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      textDecoration: isCompleted ? "line-through" : "none",
+                      flex: 1,
+                    }}>{slot.name}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: T.inkFaint }}>{slot.time}</span>
+                    {slot.neighborhood && <><span style={{ fontSize: 11, color: T.dust }}>·</span><span style={{ fontSize: 11, color: T.inkFaint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{slot.neighborhood}</span></>}
+                    {slot.rating && <><span style={{ fontSize: 11, color: T.dust }}>·</span><span style={{ fontSize: 11, fontWeight: 700, color: T.gold }}>★ {Number(slot.rating).toFixed(1)}</span></>}
+                  </div>
+                </div>
+
+                {/* Photo thumb or highlight badge */}
+                <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                  {slot.photos?.[0] ? (
+                    <img src={slot.photos[0]} alt={slot.name} style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover" }} onError={e => e.target.style.display = "none"} />
+                  ) : slot.highlight ? (
+                    <div style={{ fontSize: 9, fontWeight: 800, color: T.gold, background: "#c49a3c18", borderRadius: 8, padding: "2px 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>★ Must-do</div>
+                  ) : null}
+                  {isCompleted && (
+                    <div style={{ width: 22, height: 22, borderRadius: "50%", background: ratingColor, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 900, color: "white" }}>{userRating}</div>
+                  )}
+                </div>
+              </button>
+
+              {/* Transit connector between stops */}
+              {i < slots.length - 1 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 0, padding: "0 17px", height: 28 }}>
+                  {/* Vertical line segment */}
+                  <div style={{ width: 2, height: "100%", background: T.dust, marginLeft: 17, flexShrink: 0 }} />
+                  {/* Transit pill */}
+                  {nextSlot?.transit_from_prev && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: 10, background: T.paper, borderRadius: 20, padding: "2px 10px", border: `1px solid ${T.dust}` }}>
+                      <span style={{ fontSize: 11 }}>{TRANSIT_ICONS[nextSlot.transit_mode || "walk"] || "🚶"}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: T.inkLight }}>{nextSlot.transit_from_prev}</span>
+                    </div>
+                  )}
+                </div>
               )}
-            </button>
+            </div>
           );
         })}
       </div>
