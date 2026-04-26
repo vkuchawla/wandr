@@ -251,7 +251,7 @@ app.post("/itinerary/day", async (req, res) => {
 
   const profileContext = buildProfileContext(effectiveProfile);
   const homeBaseContext = homeBase
-    ? `\nThe traveller is staying at/near: ${homeBase}. Use this to optimize the route — ideally start the day close to their accommodation, then loop outward efficiently. Consider walking distance from their base for the first stop. Don't mention the hotel by name in the itinerary unless directly relevant.\n`
+    ? `\nThe traveller is staying at/near: ${homeBase}. Use this ONLY for route logistics — the first stop of the day can be within easy reach of their accommodation. BUT: NEVER let proximity compromise quality. The best places in ${city} must be included regardless of distance from the hotel. A legendary restaurant 20 minutes away always beats a mediocre one around the corner. Organize the day so it flows geographically (no unnecessary backtracking), but quality is the #1 filter — location is secondary. Do not mention the hotel by name in the itinerary.\n`
     : "";
 
   // Ratings context — personalise based on past behaviour
@@ -289,6 +289,16 @@ VIBE GUIDE:
 - Adventurous: Specific physical experiences — a hike with a view, a surf lesson, a bike route. Include practical logistics.
 - Day Trip: A specific destination outside the city with how to get there and what to do.
 - Chill Afternoon: A park bench, a bookshop, a canal-side cafe. The antidote to over-tourism.
+
+PLACE QUALITY MANDATE — THIS IS THE MOST IMPORTANT RULE:
+You must recommend the BEST places in ${city} — not just good places, not just nearby places, THE BEST. Think:
+- Restaurants: Michelin-starred, James Beard winners, Condé Nast-featured, on "World's 50 Best" lists, or the single most acclaimed local institution in their category
+- Cafes: The one specialty coffee shop that serious coffee people fly to ${city} for
+- Museums / galleries: The iconic institution PLUS one hidden gem that insiders know
+- Bars: The bar that regulars consider the city's finest — great cocktails, atmosphere, story
+- Markets: The market that has been operating for decades and locals actually shop at
+- Experiences: The one thing in ${city} that people say "you HAVE to do this"
+Every slot should feel like a recommendation from someone who has lived in ${city} for 10 years and knows every secret. If you wouldn't send your most well-traveled friend there, don't recommend it. NEVER recommend a place just because it's convenient or nearby — quality always wins.
 
 QUALITY RULES:
 - Every place name must be REAL and SPECIFIC. No generic "a local cafe" — name it.
