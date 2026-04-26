@@ -1,4 +1,5 @@
 {
+  "installCommand": "npm install --legacy-peer-deps",
   "rewrites": [
     { "source": "/trip/:id", "destination": "/index.html" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
