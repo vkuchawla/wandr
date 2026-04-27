@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { GLOBAL_CSS, NAV_H, T, TRANSIT_COLORS, TRANSIT_ICONS, CITY_PHOTOS } from "./constants.jsx";
 import { MomentCards } from "./MomentCards.jsx";
-import { PlanMode } from "./PlanMode.jsx";
+// PlanMode removed — reorder lives in MapView now
 import { MapView } from "./MapView.jsx";
 import { PlaceSheet } from "./PlaceSheet.jsx";
 import { ShareCard } from "./ShareCard.jsx";
@@ -840,10 +840,6 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
               style={{padding:"5px 11px",borderRadius:16,background:viewMode==="map"?T.ink:"transparent",border:"none",color:viewMode==="map"?"white":T.inkFaint,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
               🗺 Map
             </button>
-            <button onClick={()=>setViewMode("plan")}
-              style={{padding:"5px 11px",borderRadius:16,background:viewMode==="plan"?T.ink:"transparent",border:"none",color:viewMode==="plan"?"white":T.inkFaint,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-              ☰ Plan
-            </button>
           </div>
         </div>
       </div>
@@ -895,7 +891,7 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
         />
       )}
 
-      {/* Map mode — interactive Leaflet map */}
+      {/* Map mode — interactive Leaflet map with inline reorder */}
       {viewMode === "map" && (
         <MapView
           day={day}
@@ -903,21 +899,7 @@ function ItineraryView({ city, dates, moodContext, homeBase, profile, onBack, on
           city={city}
           ratings={ratings}
           onSlotSelect={(idx) => {}}
-        />
-      )}
-
-      {/* Plan mode — draggable list */}
-      {viewMode === "plan" && (
-        <PlanMode
-          day={day}
-          activeDay={activeDay}
-          ratings={ratings}
-          BUCKET_COLORS={BUCKET_COLORS}
-          getBucket={getBucket}
-          TRANSIT_ICONS={TRANSIT_ICONS}
-          TRANSIT_COLORS={TRANSIT_COLORS}
-          setSelectedPlace={setSelectedPlace}
-          onUpdateSlots={(newSlots) => {
+          onReorderSlots={(newSlots) => {
             setDaysData(prev => prev.map((d, i) =>
               i === activeDay ? { ...d, slots: newSlots } : d
             ));
